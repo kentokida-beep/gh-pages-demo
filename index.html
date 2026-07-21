@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>デプロイテスト</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #1a56db 0%, #0f172a 100%);
+      color: #fff;
+      padding: 24px;
+    }
+    .card {
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px;
+      padding: 48px 40px;
+      text-align: center;
+      max-width: 480px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .emoji { font-size: 56px; margin-bottom: 16px; }
+    h1 { font-size: 26px; font-weight: 800; margin-bottom: 12px; }
+    p { font-size: 15px; line-height: 1.7; color: rgba(255,255,255,0.85); }
+    .badge {
+      display: inline-block;
+      margin-top: 24px;
+      padding: 8px 18px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    #time { margin-top: 20px; font-size: 13px; color: rgba(255,255,255,0.6); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="emoji">🚀</div>
+    <h1>デプロイ成功！</h1>
+    <p>このページは GitHub Pages 上で公開されています。<br>Claude Code から自動でデプロイしたテストページです。</p>
+    <div class="badge">Powered by GitHub Pages</div>
+    <div id="time"></div>
+  </div>
+  <script>
+    document.getElementById('time').textContent =
+      'ページ表示時刻: ' + new Date().toLocaleString('ja-JP');
+  </script>
+</body>
+</html>
