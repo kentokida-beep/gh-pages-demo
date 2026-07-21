@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>共有メモボード</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif; background:#f1f5f9; color:#0f172a; padding:24px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  h1 { font-size:22px; font-weight:800; }
+  .status { font-size:12px; color:#64748b; }
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  button { border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:700; cursor:pointer; }
+  .btn-primary { background:#1a56db; color:#fff; }
+  .btn-add { background:#059669; color:#fff; }
+  .btn-del { background:#ef4444; color:#fff; padding:6px 10px; font-size:12px; }
+  .btn-primary:disabled { opacity:.5; cursor:default; }
+  table { width:100%; border-collapse:collapse; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,.06); }
+  th { background:#1e293b; color:#fff; font-size:13px; padding:12px; text-align:left; }
+  td { border-top:1px solid #e2e8f0; padding:6px; vertical-align:middle; }
+  td input, td select { width:100%; border:1px solid transparent; border-radius:6px; padding:8px; font-size:14px; background:transparent; }
+  td input:focus, td select:focus { border-color:#1a56db; outline:none; background:#fff; }
+  .col-del { width:60px; text-align:center; }
+  .hint { margin-top:12px; font-size:12px; color:#64748b; line-height:1.6; }
+  /* パスワードオーバーレイ */
+  #pw-overlay { position:fixed; inset:0; background:#0f172a; z-index:9999; display:flex; align-items:center; justify-content:center; }
+  #pw-overlay .box { background:#fff; border-radius:16px; padding:40px; text-align:center; width:320px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+</style>
+</head>
+<body>
+
+<!-- パスワードゲート -->
+<div id="pw-overlay">
+  <div class="box">
+    <div style="font-size:28px;margin-bottom:8px;">🔒</div>
+    <div style="font-size:18px;font-weight:800;margin-bottom:4px;color:#0f172a;">アクセス制限</div>
+    <div style="font-size:12px;color:#718096;margin-bottom:20px;">パスワードを入力してください</div>
+    <input type="password" id="pw-input" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:16px;text-align:center;outline:none;margin-bottom:12px;" placeholder="パスワード" onkeypress="if(event.key==='Enter')checkPw()">
+    <button class="btn-primary" style="width:100%;" onclick="checkPw()">ログイン</button>
+    <div id="pw-err" style="color:#dc2626;font-size:12px;margin-top:8px;display:none;">パスワードが正しくありません</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <header>
+    <h1>📋 共有メモボード</h1>
+    <div class="status" id="status">読み込み中…</div>
+  </header>
+  <div class="toolbar">
+    <button class="btn-add" onclick="addRow()">＋ 行を追加</button>
+    <button class="btn-primary" id="saveBtn" onclick="save()">💾 保存（全員に反映）</button>
+  </div>
+  <table>
+    <thead>
+      <tr><th>担当者</th><th>内容</th><th>ステータス</th><th class="col-del"></th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="hint">
+    ・入力したら必ず「💾 保存」を押してください（全員のデータに反映されます）。<br>
+    ・他の人の変更は数秒ごとに自動で取り込みます（編集中の行は上書きしません）。<br>
+    ・パスワードは <b>0831</b> です。
+  </div>
+</div>
+
+<script>
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbw1TYju1yZB0yUx8IX6YNnZzcQw4_WpMyl62JBRsRbk1h64e0nLnI8ljKqX2fWFIuR0/exec';
+const PW = '0831';
+const STATUSES = ['未着手','対応中','完了','保留'];
+let APP_PW = '';
+let editing = false;      // ユーザーが入力中か
+let saving = false;
+
+// ---- パスワードゲート ----
+(function(){
+  const K='memo_pw_auth';
+  if(localStorage.getItem(K)===PW){ unlock(); }
+})();
+function checkPw(){
+  const v=document.getElementById('pw-input').value;
+  if(v===PW){ localStorage.setItem('memo_pw_auth',PW); unlock(); }
+  else { document.getElementById('pw-err').style.display='block'; }
+}
+function unlock(){
+  APP_PW = PW;
+  document.getElementById('pw-overlay').style.display='none';
+  load();
+  setInterval(()=>{ if(!editing && !saving) load(); }, 5000);
+}
+window.checkPw = checkPw;
+
+// ---- API ----
+async function apiGet(params){
+  const q = new URLSearchParams({...params, pw:APP_PW});
+  const res = await fetch(BACKEND_URL+'?'+q.toString(), {redirect:'follow'});
+  return res.json();
+}
+async function apiPost(body){
+  const res = await fetch(BACKEND_URL, {
+    method:'POST', redirect:'follow',
+    headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify({...body, pw:APP_PW})
+  });
+  return res.json();
+}
+
+// ---- 描画 ----
+function setStatus(t){ document.getElementById('status').textContent=t; }
+
+function render(rows){
+  const tb=document.getElementById('tbody');
+  tb.innerHTML='';
+  rows.forEach((r)=> tb.appendChild(rowEl(r)));
+}
+function rowEl(r){
+  r = r || ['','',''];
+  const tr=document.createElement('tr');
+  // 担当者
+  tr.appendChild(cellInput(r[0]));
+  // 内容
+  tr.appendChild(cellInput(r[1]));
+  // ステータス（select）
+  const tdS=document.createElement('td');
+  const sel=document.createElement('select');
+  STATUSES.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; if(s===r[2])o.selected=true; sel.appendChild(o); });
+  if(!STATUSES.includes(r[2]) && r[2]){ const o=document.createElement('option'); o.value=r[2]; o.textContent=r[2]; o.selected=true; sel.appendChild(o); }
+  sel.onfocus=()=>editing=true; sel.onblur=()=>editing=false;
+  tdS.appendChild(sel); tr.appendChild(tdS);
+  // 削除
+  const tdD=document.createElement('td'); tdD.className='col-del';
+  const del=document.createElement('button'); del.className='btn-del'; del.textContent='削除';
+  del.onclick=()=>{ tr.remove(); };
+  tdD.appendChild(del); tr.appendChild(tdD);
+  return tr;
+}
+function cellInput(val){
+  const td=document.createElement('td');
+  const inp=document.createElement('input'); inp.type='text'; inp.value=val||'';
+  inp.onfocus=()=>editing=true; inp.onblur=()=>editing=false;
+  td.appendChild(inp); return td;
+}
+function collect(){
+  const rows=[];
+  document.querySelectorAll('#tbody tr').forEach(tr=>{
+    const inputs=tr.querySelectorAll('input');
+    const sel=tr.querySelector('select');
+    const row=[inputs[0].value, inputs[1].value, sel?sel.value:''];
+    if(row.some(v=>String(v).trim()!=='')) rows.push(row);
+  });
+  return rows;
+}
+
+// ---- 読み書き ----
+async function load(){
+  try{
+    const d=await apiGet({cmd:'load'});
+    if(d.ok){ render(d.rows.length?d.rows:[['','','']]); setStatus('最終更新: '+new Date().toLocaleTimeString('ja-JP')); }
+    else setStatus('読み込みエラー: '+(d.error||''));
+  }catch(e){ setStatus('通信エラー'); }
+}
+function addRow(){ document.getElementById('tbody').appendChild(rowEl(['','',''])); }
+async function save(){
+  saving=true;
+  const btn=document.getElementById('saveBtn'); btn.disabled=true; setStatus('保存中…');
+  try{
+    const d=await apiPost({cmd:'save', rows:collect()});
+    if(d.ok){ setStatus('✅ 保存しました '+new Date().toLocaleTimeString('ja-JP')); if(d.rows) render(d.rows.length?d.rows:[['','','']]); }
+    else setStatus('保存エラー: '+(d.error||''));
+  }catch(e){ setStatus('通信エラー'); }
+  finally{ btn.disabled=false; saving=false; }
+}
+window.addRow=addRow; window.save=save;
+</script>
+</body>
+</html>
