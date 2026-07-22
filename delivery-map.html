@@ -57,6 +57,14 @@
     <h1>🗺️ 配送エリアマップ</h1>
     <div class="sub" id="meta">読み込み中…</div>
 
+    <div class="group" id="update-box" style="background:#111c33;border:1px solid #1e3a5f;border-radius:10px;padding:12px;">
+      <h2>🔄 CMSデータで更新</h2>
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;line-height:1.5;">CMSからDLしたCSVを選び「地図を更新」を押すと、全員の地図に反映されます。</div>
+      <input type="file" id="csvfile" accept=".csv,text/csv" style="font-size:12px;color:#cbd5e1;width:100%;">
+      <button id="ingestBtn" style="margin-top:8px;width:100%;padding:9px;border:none;border-radius:8px;background:#059669;color:#fff;font-weight:700;cursor:pointer;">この内容で地図を更新</button>
+      <div id="ingest-status" style="font-size:11px;color:#cbd5e1;margin-top:8px;line-height:1.6;"></div>
+    </div>
+
     <div class="group">
       <h2>キーワード（企業名・住所）</h2>
       <input type="text" id="kw" placeholder="例：渋谷 / 医療法人…">
@@ -90,6 +98,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
 // ===== 設定 =====
 const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbycvBSQsGtNMCPCHgf29ww6lbTpPbShfhVq_NAIlLr2yDOav7ZJQ-MuiSCW3OMTHw9L/exec';
@@ -235,8 +244,83 @@ function popupHtml(p){
 }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
+// ===== CMSデータで更新（アプリ内アップロード）=====
+const HCOL = {company:'企業',floor:'フロア',pc:'ピッキングセンター',depot:'デポ',pref:'都道府県',address:'住所',plan:'プラン',count:'個数',status:'稼働ステータス',mon:'月',tue:'火',wed:'水',thu:'木',fri:'金',lat:'緯度',lng:'経度'};
+function ingStatus(t){ document.getElementById('ingest-status').innerHTML=t; }
+async function decodeCsv(file){
+  const buf=await file.arrayBuffer();
+  let text=new TextDecoder('shift_jis',{fatal:false}).decode(buf);
+  if(!text || text.indexOf('企業')<0) text=new TextDecoder('utf-8').decode(buf);
+  return text;
+}
+function isCancel(st){ return /解約|キャンセル|停止|休止|終了/.test(st||''); }
+function normPlan(x){ if(!x)return''; if(x.indexOf('ごはん')>=0)return'ごはん'; if(x.indexOf('やさい')>=0)return'やさい'; return''; }
+function marked(v){ v=(v==null?'':String(v)).trim(); return v!==''&&v!=='0'&&v!=='×'&&v!=='-'; }
+function toNum(v){ v=(v==null?'':String(v)).trim(); if(v==='')return null; const n=Number(v); return isFinite(n)?n:null; }
+function classifySets(deps,pcs){
+  const dep=[...deps].filter(Boolean), pcl=[...pcs].filter(Boolean);
+  const hasDel=dep.some(d=>d.indexOf('宅急便')<0&&d.indexOf('宅配')<0&&d.indexOf('メーカー')<0);
+  const hasTak=dep.some(d=>d.indexOf('宅急便')>=0||d.indexOf('宅配')>=0);
+  const hasFrz=dep.some(d=>d.indexOf('冷凍')>=0)||pcl.some(p=>p.indexOf('冷凍')>=0);
+  if(hasDel)return'デリバリー';
+  if(hasTak)return hasFrz?'宅急便(冷凍)':'宅急便';
+  if(hasFrz)return'冷凍(宅配)';
+  if(dep.length)return'デリバリー';
+  return'未設定';
+}
+function transformRows(rows){
+  const header=rows[0].map(h=>String(h).trim()), idx={};
+  for(const k in HCOL) idx[k]=header.indexOf(HCOL[k]);
+  for(const req of ['company','address','lat','lng']) if(idx[req]<0) throw new Error('必須列が見つかりません: '+HCOL[req]);
+  const DAYS=[['月','mon'],['火','tue'],['水','wed'],['木','thu'],['金','fri']];
+  const g=(row,k)=> idx[k]>=0 ? (row[idx[k]]==null?'':String(row[idx[k]]).trim()) : '';
+  const byloc={}, stats={rawRows:rows.length-1,active:0,cancelled:0,dropped_noCoord:0};
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r]; if(!row) continue;
+    const company=g(row,'company'), address=g(row,'address');
+    if(!company&&!address) continue;
+    const status=g(row,'status'), cancel=isCancel(status);
+    const depot=g(row,'depot'), pc=g(row,'pc'), plan=normPlan(g(row,'plan'));
+    const days=DAYS.filter(d=>marked(g(row,d[1]))).map(d=>d[0]);
+    let lat=toNum(g(row,'lat')), lng=toNum(g(row,'lng'));
+    if(lat==null||lng==null){ stats.dropped_noCoord++; continue; }
+    stats[cancel?'cancelled':'active']++;
+    const key=company+'|'+g(row,'floor')+'|'+address;
+    let L=byloc[key];
+    if(!L){ L={name:company,floor:g(row,'floor'),addr:address,pref:g(row,'pref'),lat:Math.round(lat*1e6)/1e6,lng:Math.round(lng*1e6)/1e6,cancelled:true,status:status,act_dep:new Set(),act_pc:new Set(),any_dep:new Set(),any_pc:new Set(),plans:new Set(),days:new Set(),count:0}; byloc[key]=L; }
+    if(depot)L.any_dep.add(depot); if(pc)L.any_pc.add(pc);
+    if(!cancel){ L.cancelled=false; L.status=status; if(depot)L.act_dep.add(depot); if(pc)L.act_pc.add(pc); if(plan)L.plans.add(plan); days.forEach(d=>L.days.add(d)); const c=toNum(g(row,'count')); if(c!=null)L.count+=Math.round(c); }
+  }
+  const pts=[];
+  for(const k in byloc){ const L=byloc[k];
+    if(L.cancelled) pts.push({name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:'解約',status:'解約',depot:'',pc:'',plans:[],days:[],count:''});
+    else pts.push({name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:classifySets(L.act_dep,L.act_pc),status:L.status,depot:[...L.act_dep].sort().join(' / '),pc:[...L.act_pc].sort().join(' / '),plans:[...L.plans].sort(),days:['月','火','水','木','金'].filter(d=>L.days.has(d)),count:L.count});
+  }
+  stats.locations=pts.length; stats.active_locations=pts.filter(p=>p.kubun!=='解約').length;
+  const now=new Date(), p2=n=>String(n).padStart(2,'0');
+  stats.generatedAt=`${now.getFullYear()}/${p2(now.getMonth()+1)}/${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
+  return {generatedAt:stats.generatedAt,points:pts,stats:stats};
+}
+async function ingest(){
+  const f=document.getElementById('csvfile').files[0];
+  if(!f){ ingStatus('<span style="color:#f87171">CSVファイルを選んでください</span>'); return; }
+  const btn=document.getElementById('ingestBtn'); btn.disabled=true;
+  try{
+    ingStatus('① CSV読み込み中…'); const text=await decodeCsv(f);
+    ingStatus('② 解析中…'); const parsed=Papa.parse(text,{skipEmptyLines:true});
+    ingStatus('③ 変換中…'); const result=transformRows(parsed.data);
+    ingStatus(`④ 送信中… 稼働${result.stats.active_locations.toLocaleString()}拠点`);
+    const res=await fetch(BACKEND_URL,{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain'},body:JSON.stringify({pw:PW,json:JSON.stringify(result)})});
+    const d=await res.json();
+    if(d.ok){ ingStatus(`✅ 更新完了：${d.locations.toLocaleString()}拠点を反映（座標なし${result.stats.dropped_noCoord.toLocaleString()}件は未表示）`); await loadData(); }
+    else ingStatus('<span style="color:#f87171">更新失敗: '+(d.error||'')+'</span>');
+  }catch(e){ ingStatus('<span style="color:#f87171">エラー: '+e.message+'</span>'); }
+  finally{ btn.disabled=false; }
+}
+document.getElementById('ingestBtn').onclick=ingest;
+
 document.getElementById('foot').innerHTML =
-  'ピンをクリックで詳細。上部フィルタで区分・プラン・曜日・都道府県・キーワードを絞り込み。<br>データは元スプレッドシートから自動反映（社外秘）。';
+  'ピンをクリックで詳細。上部フィルタで区分・プラン・曜日・都道府県・キーワードを絞り込み。<br>「解約」はグレーピン（初期OFF）。データは社外秘。';
 </script>
 </body>
 </html>
