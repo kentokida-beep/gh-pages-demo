@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>配送エリアマップ（新）</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<style>
+  :root{ color-scheme:light dark; }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ height:100%; font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif; }
+  #app{ display:flex; height:100%; }
+  #sidebar{ width:300px; flex:0 0 300px; background:#0f172a; color:#e2e8f0; padding:16px; overflow-y:auto; }
+  #map{ flex:1; }
+  h1{ font-size:16px; font-weight:800; margin-bottom:4px; }
+  .sub{ font-size:11px; color:#94a3b8; margin-bottom:14px; line-height:1.5; }
+  .group{ margin-bottom:16px; }
+  .group h2{ font-size:12px; font-weight:700; color:#cbd5e1; margin-bottom:8px; letter-spacing:.03em; }
+  .chips{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip{ display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:5px 9px; border-radius:999px;
+         background:#1e293b; border:1px solid #334155; cursor:pointer; user-select:none; }
+  .chip.on{ background:#1d4ed8; border-color:#3b82f6; color:#fff; }
+  .chip .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+  select,input[type=text]{ width:100%; padding:8px; border-radius:8px; border:1px solid #334155; background:#1e293b; color:#e2e8f0; font-size:13px; }
+  .count{ font-size:12px; color:#94a3b8; margin-top:6px; }
+  .foot{ font-size:10px; color:#64748b; margin-top:18px; line-height:1.6; border-top:1px solid #1e293b; padding-top:10px; }
+  .marker-dot{ border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.4); }
+  .lp b{ font-size:14px; }
+  .lp table{ margin-top:6px; font-size:12px; border-collapse:collapse; }
+  .lp td{ padding:2px 6px 2px 0; vertical-align:top; }
+  .lp td.k{ color:#64748b; white-space:nowrap; }
+  #pw-overlay{ position:fixed; inset:0; background:#0f172a; z-index:9999; display:flex; align-items:center; justify-content:center; }
+  #pw-overlay .box{ background:#fff; color:#0f172a; border-radius:16px; padding:36px; text-align:center; width:320px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  #pw-overlay input{ width:100%; padding:10px 14px; border:2px solid #e2e8f0; border-radius:8px; font-size:16px; text-align:center; outline:none; margin-bottom:12px; color:#0f172a; background:#fff; }
+  #pw-overlay button{ width:100%; border:none; border-radius:8px; padding:10px; font-size:14px; font-weight:700; background:#1d4ed8; color:#fff; cursor:pointer; }
+  #loading{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:800; background:#fff; color:#0f172a; padding:14px 20px; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,.2); font-size:13px; }
+  @media(max-width:640px){ #app{ flex-direction:column; } #sidebar{ width:100%; flex:0 0 auto; max-height:42%; } }
+</style>
+</head>
+<body>
+
+<div id="pw-overlay">
+  <div class="box">
+    <div style="font-size:28px;margin-bottom:8px;">🗺️</div>
+    <div style="font-size:18px;font-weight:800;margin-bottom:4px;">配送エリアマップ</div>
+    <div style="font-size:12px;color:#718096;margin-bottom:20px;">パスワードを入力してください</div>
+    <input type="password" id="pw-input" placeholder="パスワード" onkeypress="if(event.key==='Enter')checkPw()">
+    <button onclick="checkPw()">ログイン</button>
+    <div id="pw-err" style="color:#dc2626;font-size:12px;margin-top:8px;display:none;">パスワードが正しくありません</div>
+  </div>
+</div>
+
+<div id="app">
+  <div id="sidebar">
+    <h1>🗺️ 配送エリアマップ</h1>
+    <div class="sub" id="meta">読み込み中…</div>
+
+    <div class="group">
+      <h2>キーワード（企業名・住所）</h2>
+      <input type="text" id="kw" placeholder="例：渋谷 / 医療法人…">
+    </div>
+
+    <div class="group">
+      <h2>配送区分</h2>
+      <div class="chips" id="f-kubun"></div>
+    </div>
+
+    <div class="group">
+      <h2>プラン</h2>
+      <div class="chips" id="f-plan"></div>
+    </div>
+
+    <div class="group">
+      <h2>配達曜日（デリバリー）</h2>
+      <div class="chips" id="f-day"></div>
+    </div>
+
+    <div class="group">
+      <h2>都道府県</h2>
+      <select id="f-pref"><option value="">すべて</option></select>
+    </div>
+
+    <div class="count" id="count"></div>
+    <div class="foot" id="foot"></div>
+  </div>
+  <div id="map"><div id="loading">データ取得中…</div></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+// ===== 設定 =====
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbycvBSQsGtNMCPCHgf29ww6lbTpPbShfhVq_NAIlLr2yDOav7ZJQ-MuiSCW3OMTHw9L/exec';
+const PW = 'ody-map';          // ← 変更可（このHTML内の平文簡易ゲート。実際の保護は上記の非公開URL）
+
+// 配送区分ごとの色
+const KUBUN_COLORS = {
+  'デリバリー'   : '#16a34a', // 緑：配達員対応
+  '宅急便'       : '#2563eb', // 青：宅配便
+  '宅急便(冷凍)' : '#0891b2', // シアン：宅配便＋冷凍
+  '冷凍(宅配)'   : '#7c3aed', // 紫：冷凍
+  '未設定'       : '#f59e0b', // 橙
+  '解約'         : '#94a3b8'  // グレー
+};
+const DAYS = ['月','火','水','木','金'];
+
+// ===== パスワードゲート =====
+(function(){ if(localStorage.getItem('deliv_map_pw')===PW) unlock(); })();
+function checkPw(){
+  const v=document.getElementById('pw-input').value;
+  if(v===PW){ localStorage.setItem('deliv_map_pw',PW); unlock(); }
+  else document.getElementById('pw-err').style.display='block';
+}
+window.checkPw=checkPw;
+
+let MAP, CLUSTER, ALL=[], ICONS={};
+const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'' };
+
+function unlock(){
+  document.getElementById('pw-overlay').style.display='none';
+  initMap();
+  loadData();
+}
+
+function initMap(){
+  MAP = L.map('map',{ preferCanvas:true }).setView([37.5,137.0], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
+  }).addTo(MAP);
+  CLUSTER = L.markerClusterGroup({ chunkedLoading:true, spiderfyOnMaxZoom:true, maxClusterRadius:50 });
+  MAP.addLayer(CLUSTER);
+}
+
+function iconFor(kubun){
+  if(ICONS[kubun]) return ICONS[kubun];
+  const c = KUBUN_COLORS[kubun] || '#f59e0b';
+  const ic = L.divIcon({
+    className:'', html:`<div class="marker-dot" style="width:14px;height:14px;background:${c};"></div>`,
+    iconSize:[14,14], iconAnchor:[7,7], popupAnchor:[0,-7]
+  });
+  ICONS[kubun]=ic; return ic;
+}
+
+async function loadData(){
+  try{
+    const res = await fetch(BACKEND_URL+'?t='+Date.now(), {redirect:'follow'});
+    const d = await res.json();
+    ALL = (d.points||[]).filter(p=>typeof p.lat==='number' && typeof p.lng==='number');
+    document.getElementById('meta').textContent =
+      `データ生成: ${d.generatedAt||'-'} ／ 拠点 ${ (d.stats&&d.stats.locations)||ALL.length } 件`;
+    buildFilters();
+    apply();
+    const l=document.getElementById('loading'); if(l) l.remove();
+  }catch(e){
+    document.getElementById('loading').textContent = '取得エラー: '+e.message;
+  }
+}
+
+function buildFilters(){
+  // 区分
+  const kubuns=[...new Set(ALL.map(p=>p.kubun))].sort();
+  state.kubun = new Set(kubuns.filter(k=>k!=='解約')); // 解約は初期OFF
+  chips('f-kubun', kubuns, state.kubun, KUBUN_COLORS);
+  // プラン
+  const plans=[...new Set(ALL.flatMap(p=>p.plans||[]))].sort();
+  state.plan = new Set(plans);
+  chips('f-plan', plans, state.plan, null);
+  // 曜日
+  chips('f-day', [...DAYS,'なし'], state.day, null);
+  // 都道府県
+  const prefs=[...new Set(ALL.map(p=>p.pref).filter(Boolean))].sort();
+  const sel=document.getElementById('f-pref');
+  prefs.forEach(pf=>{ const o=document.createElement('option'); o.value=pf; o.textContent=pf; sel.appendChild(o); });
+  sel.onchange=()=>{ state.pref=sel.value; apply(); };
+  document.getElementById('kw').oninput=(e)=>{ state.kw=e.target.value.trim(); apply(); };
+}
+
+function chips(containerId, items, set, colors){
+  const box=document.getElementById(containerId); box.innerHTML='';
+  items.forEach(it=>{
+    const el=document.createElement('span');
+    el.className='chip'+(set.has(it)?' on':'');
+    const dot = colors ? `<span class="dot" style="background:${colors[it]||'#94a3b8'}"></span>`:'';
+    el.innerHTML = dot + `<span>${it}</span>`;
+    el.onclick=()=>{ set.has(it)?set.delete(it):set.add(it); el.classList.toggle('on'); apply(); };
+    box.appendChild(el);
+  });
+}
+
+function match(p){
+  if(!state.kubun.has(p.kubun)) return false;
+  if(state.pref && p.pref!==state.pref) return false;
+  // プラン：点のプランのいずれかが選択されていればOK。プラン情報なしは常に表示。
+  if((p.plans||[]).length){
+    if(!p.plans.some(pl=>state.plan.has(pl))) return false;
+  }
+  // 曜日：デリバリーで曜日ありなら選択曜日と交差、曜日なしは「なし」がONなら表示
+  const days=p.days||[];
+  if(days.length){ if(!days.some(d=>state.day.has(d))) return false; }
+  else{ if(!state.day.has('なし')) return false; }
+  if(state.kw){
+    const s=(p.name+' '+p.addr).toLowerCase();
+    if(s.indexOf(state.kw.toLowerCase())<0) return false;
+  }
+  return true;
+}
+
+function apply(){
+  const shown = ALL.filter(match);
+  CLUSTER.clearLayers();
+  const markers = shown.map(p=>{
+    const m=L.marker([p.lat,p.lng],{icon:iconFor(p.kubun)});
+    m.bindPopup(popupHtml(p),{maxWidth:320});
+    return m;
+  });
+  CLUSTER.addLayers(markers);
+  document.getElementById('count').textContent = `表示中: ${shown.length.toLocaleString()} 拠点`;
+}
+
+function popupHtml(p){
+  const row=(k,v)=> v?`<tr><td class="k">${k}</td><td>${esc(v)}</td></tr>`:'';
+  return `<div class="lp"><b>${esc(p.name||'(名称なし)')}</b>${p.floor?' <span style="color:#64748b">'+esc(p.floor)+'</span>':''}
+    <table>
+      ${row('住所',p.addr)}
+      ${row('配送区分',p.kubun)}
+      ${row('デポ/委託先',p.depot)}
+      ${row('PC',p.pc)}
+      ${row('プラン',(p.plans||[]).join('・'))}
+      ${row('配達曜日',(p.days||[]).join('・'))}
+      ${row('個数',p.count)}
+      ${row('ステータス',p.status)}
+    </table></div>`;
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+document.getElementById('foot').innerHTML =
+  'ピンをクリックで詳細。上部フィルタで区分・プラン・曜日・都道府県・キーワードを絞り込み。<br>データは元スプレッドシートから自動反映（社外秘）。';
+</script>
+</body>
+</html>
