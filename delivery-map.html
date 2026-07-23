@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>配送エリアマップ（新）</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<link rel="stylesheet" href="./lib/leaflet.css">
+<link rel="stylesheet" href="./lib/MarkerCluster.css">
+<link rel="stylesheet" href="./lib/MarkerCluster.Default.css">
 <style>
   :root{ color-scheme:light dark; }
   *{ margin:0; padding:0; box-sizing:border-box; }
@@ -150,9 +150,9 @@
   <div id="map"><div id="loading">データ取得中…</div></div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="./lib/leaflet.js"></script>
+<script src="./lib/markercluster.js"></script>
+<script src="./lib/papaparse.min.js"></script>
 <script>
 // ===== 設定 =====
 const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbycvBSQsGtNMCPCHgf29ww6lbTpPbShfhVq_NAIlLr2yDOav7ZJQ-MuiSCW3OMTHw9L/exec';
@@ -219,8 +219,8 @@ function unlock(){
 
 function initMap(){
   MAP = L.map('map',{ preferCanvas:true }).setView([37.5,137.0], 5);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
+  L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{
+    maxZoom:18, attribution:'地理院タイル'
   }).addTo(MAP);
   CLUSTER = L.markerClusterGroup({ chunkedLoading:true, spiderfyOnMaxZoom:true, maxClusterRadius:50 });
   MAP.addLayer(CLUSTER);
