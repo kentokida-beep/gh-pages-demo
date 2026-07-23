@@ -244,20 +244,29 @@ function colorOf(p){
 }
 
 async function loadData(){
+  const box=document.getElementById('loading');
+  const t0=Date.now(); let timer=null;
+  if(box){ box.innerHTML='データ取得中… 0秒'; timer=setInterval(()=>{ const el=document.getElementById('loading'); if(el) el.innerHTML='データ取得中… '+Math.round((Date.now()-t0)/1000)+'秒<br><span style="font-size:11px;color:#94a3b8">初回は数秒かかります</span>'; },1000); }
   try{
-    const res = await fetch(BACKEND_URL+'?t='+Date.now(), {redirect:'follow'});
-    const d = await res.json();
+    const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),90000);
+    const res=await fetch(BACKEND_URL+'?t='+Date.now(),{redirect:'follow',signal:ctrl.signal});
+    clearTimeout(to);
+    const d=await res.json();
     cxLoaded=false; cxCache=[]; // 解約は再取得
-    ALL = (d.points||[]).filter(p=>typeof p.lat==='number' && typeof p.lng==='number');
-    document.getElementById('meta').textContent =
+    ALL=(d.points||[]).filter(p=>typeof p.lat==='number' && typeof p.lng==='number');
+    document.getElementById('meta').textContent=
       `データ生成: ${d.generatedAt||'-'} ／ 稼働 ${ (d.stats&&d.stats.active_locations)||ALL.length } 拠点`;
     buildFilters();
     await apply();
+    if(timer)clearInterval(timer);
     const l=document.getElementById('loading'); if(l) l.remove();
   }catch(e){
-    document.getElementById('loading').textContent = '取得エラー: '+e.message;
+    if(timer)clearInterval(timer);
+    const l=document.getElementById('loading');
+    if(l) l.innerHTML='<b style="color:#f87171">読み込みに失敗しました</b><br><span style="font-size:12px">'+(e.name==='AbortError'?'時間切れ（通信が遅い/ブロックの可能性）':esc(e.message))+'</span><br><button onclick="loadData()" style="margin-top:10px;padding:7px 14px;border:none;border-radius:8px;background:#1d4ed8;color:#fff;font-weight:700;cursor:pointer;">再読み込み</button>';
   }
 }
+window.loadData=loadData;
 
 function buildFilters(){
   // 区分（稼働はデータから／「解約」は遅延読込チップとして常設・初期OFF）
