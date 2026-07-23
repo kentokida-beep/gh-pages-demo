@@ -66,6 +66,7 @@
     <div class="hd">
       <b>⚠️ 座標未解決リスト</b>
       <div>
+        <button id="unres-fill" style="background:#78350f;color:#fde68a;margin-right:6px;" onclick="fillUnresolvedViaGsi()">GSIで座標を補完して反映</button>
         <button id="unres-copy" style="background:#e2e8f0;color:#0f172a;margin-right:6px;" onclick="copyUnresolved()">コピー</button>
         <button id="unres-close" style="background:#1d4ed8;color:#fff;">閉じる</button>
       </div>
@@ -506,34 +507,58 @@ async function geocodePending(pending,onProg){
   return {resolved, unresolved};
 }
 
+// 共有ジオコーディングキャッシュ（サーバ配信）で座標なしを「待たずに」即補完
+let SHARED_GEO=null, RESIDUAL=[], LAST_ACTIVE=null, LAST_GEN='';
+async function ensureGeocache(){
+  if(SHARED_GEO) return;
+  try{ const r=await fetch(BACKEND_URL+'?set=geocache&t='+Date.now(),{redirect:'follow'}); SHARED_GEO=await r.json()||{}; }
+  catch(e){ SHARED_GEO={}; }
+}
+function postSet(gen,set,pts){
+  return fetch(BACKEND_URL,{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain'},
+    body:JSON.stringify({pw:PW,set:set,json:JSON.stringify({generatedAt:gen,points:pts,stats:{locations:pts.length}})})}).then(r=>r.json());
+}
+
 async function ingest(){
   const f=document.getElementById('csvfile').files[0];
   if(!f){ ingStatus('<span style="color:#f87171">CSVファイルを選んでください</span>'); return; }
   const btn=document.getElementById('ingestBtn'); btn.disabled=true;
   try{
-    ingStatus('① CSV読み込み中…'); const text=await decodeCsv(f);
+    ingStatus('① 読み込み中…'); const text=await decodeCsv(f);
     ingStatus('② 解析中…'); const parsed=Papa.parse(text,{skipEmptyLines:true});
-    ingStatus('③ 変換中…'); const result=transformRows(parsed.data);
-    let unresolved=[];
-    if(result.pending.length){
-      const gc=await geocodePending(result.pending,(i,n)=>ingStatus(`③ 住所から座標を補完中… ${i}/${n}`));
-      result.active=result.active.concat(gc.resolved); unresolved=gc.unresolved;
-    }
-    const gen=result.generatedAt;
-    const post=(set,pts)=>fetch(BACKEND_URL,{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({pw:PW,set:set,json:JSON.stringify({generatedAt:gen,points:pts,stats:{locations:pts.length}})})}).then(r=>r.json());
-    ingStatus(`④ 送信中… 稼働${result.active.length.toLocaleString()}拠点`);
-    const d1=await post('main', result.active);
-    if(!d1.ok){ ingStatus('<span style="color:#f87171">更新失敗(稼働): '+(d1.error||'')+'</span>'); return; }
-    await post('cx', result.cx);
-    await post('unresolved', unresolved);
+    ingStatus('③ 整形中…'); const result=transformRows(parsed.data);
+    ingStatus('④ 座標を補完中…'); await ensureGeocache();
+    const residual=[];
+    result.pending.forEach(p=>{ const g=SHARED_GEO&&SHARED_GEO[p.addr]; if(g){ p.lat=g[0]; p.lng=g[1]; result.active.push(p); } else residual.push({name:p.name,addr:p.addr,pref:p.pref}); });
+    const gen=result.generatedAt; LAST_GEN=gen; LAST_ACTIVE=result.active; RESIDUAL=residual;
+    ingStatus(`⑤ 反映中… 稼働${result.active.length.toLocaleString()}拠点`);
+    const d1=await postSet(gen,'main',result.active);
+    if(!d1.ok){ ingStatus('<span style="color:#f87171">反映失敗: '+(d1.error||'auth?')+'</span>'); return; }
+    await postSet(gen,'cx',result.cx);
+    await postSet(gen,'unresolved',residual);
     cxLoaded=false; cxCache=[];
-    ingStatus(`✅ 更新完了：稼働${result.active.length.toLocaleString()} ／ 解約${result.cx.length.toLocaleString()} ／ 座標未解決${unresolved.length}件`);
+    ingStatus(`✅ 反映しました：稼働 ${result.active.length.toLocaleString()} ／ 解約 ${result.cx.length.toLocaleString()}${residual.length?` ／ 座標未解決 ${residual.length}件` : ''}`);
     await loadData(); await loadUnresolved();
   }catch(e){ ingStatus('<span style="color:#f87171">エラー: '+e.message+'</span>'); }
   finally{ document.getElementById('ingestBtn').disabled=false; }
 }
 document.getElementById('ingestBtn').onclick=ingest;
+
+// 未解決（新規住所）を必要な時だけGSIで補完して反映（任意・時間がかかる）
+async function fillUnresolvedViaGsi(){
+  const btn=document.getElementById('unres-fill');
+  if(!RESIDUAL.length || !LAST_ACTIVE){ if(btn) btn.textContent='補完対象は今回のアップロード分のみ'; return; }
+  if(btn){ btn.disabled=true; }
+  const gc=await geocodePending(RESIDUAL,(i,n)=>{ if(btn) btn.textContent=`GSIで補完中… ${i}/${n}`; });
+  if(gc.resolved.length){
+    LAST_ACTIVE=LAST_ACTIVE.concat(gc.resolved); RESIDUAL=gc.unresolved;
+    await postSet(LAST_GEN,'main',LAST_ACTIVE);
+    await postSet(LAST_GEN,'unresolved',RESIDUAL);
+    await loadData(); await loadUnresolved();
+  }
+  if(btn){ btn.textContent=`GSIで座標を補完して反映（${gc.resolved.length}件補完）`; btn.disabled=false; }
+}
+window.fillUnresolvedViaGsi=fillUnresolvedViaGsi;
 
 // ===== 座標未解決リスト（閲覧）=====
 let UNRESOLVED=[];
