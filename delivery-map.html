@@ -243,15 +243,27 @@ function colorOf(p){
   return KUBUN_COLORS[p.kubun]||'#f59e0b';
 }
 
+// データはGitHub Pages上の暗号化静的ファイル（./data/*.enc）。パスワードで復号して読む。
+async function decryptEnc(buf){
+  const raw=new Uint8Array(buf);
+  const salt=raw.slice(0,16), iv=raw.slice(16,28), ct=raw.slice(28);
+  const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(PW),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function fetchData(name){
+  const res=await fetch('./data/'+name+'.enc?t='+Date.now(),{cache:'no-store'});
+  if(!res.ok) throw new Error('取得失敗('+res.status+')');
+  return decryptEnc(await res.arrayBuffer());
+}
+
 async function loadData(){
   const box=document.getElementById('loading');
   const t0=Date.now(); let timer=null;
   if(box){ box.innerHTML='データ取得中… 0秒'; timer=setInterval(()=>{ const el=document.getElementById('loading'); if(el) el.innerHTML='データ取得中… '+Math.round((Date.now()-t0)/1000)+'秒<br><span style="font-size:11px;color:#94a3b8">初回は数秒かかります</span>'; },1000); }
   try{
-    const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),90000);
-    const res=await fetch(BACKEND_URL+'?t='+Date.now(),{redirect:'follow',signal:ctrl.signal});
-    clearTimeout(to);
-    const d=await res.json();
+    const d=await fetchData('active');
     cxLoaded=false; cxCache=[]; // 解約は再取得
     ALL=(d.points||[]).filter(p=>typeof p.lat==='number' && typeof p.lng==='number');
     document.getElementById('meta').textContent=
@@ -341,8 +353,7 @@ async function loadCx(){
   cxLoading=true;
   const cnt=document.getElementById('count'); if(cnt) cnt.textContent='解約データ取得中…';
   try{
-    const r=await fetch(BACKEND_URL+'?set=cx&t='+Date.now(),{redirect:'follow'});
-    const d=await r.json();
+    const d=await fetchData('cx');
     cxCache=(d.points||[]).filter(p=>typeof p.lat==='number'&&typeof p.lng==='number');
     ALL=ALL.concat(cxCache); cxLoaded=true;
   }catch(e){}
@@ -362,7 +373,7 @@ function chipsDepot(){
 async function ensureDepots(){
   if(DEPOTS || depotLoading || !state.depotTypes.size) return;
   depotLoading=true;
-  try{ const r=await fetch(BACKEND_URL+'?set=depot&t='+Date.now(),{redirect:'follow'}); const d=await r.json(); DEPOTS=d.points||[]; }
+  try{ const d=await fetchData('depot'); DEPOTS=d.points||[]; }
   catch(e){ DEPOTS=[]; }
   depotLoading=false;
 }
@@ -530,7 +541,7 @@ async function geocodePending(pending,onProg){
 let SHARED_GEO=null, RESIDUAL=[], LAST_ACTIVE=null, LAST_GEN='';
 async function ensureGeocache(){
   if(SHARED_GEO) return;
-  try{ const r=await fetch(BACKEND_URL+'?set=geocache&t='+Date.now(),{redirect:'follow'}); SHARED_GEO=await r.json()||{}; }
+  try{ SHARED_GEO=await fetchData('geocache')||{}; }
   catch(e){ SHARED_GEO={}; }
 }
 function postSet(gen,set,pts){
@@ -549,33 +560,42 @@ async function ingest(){
     ingStatus('④ 座標を補完中…'); await ensureGeocache();
     const residual=[];
     result.pending.forEach(p=>{ const g=SHARED_GEO&&SHARED_GEO[p.addr]; if(g){ p.lat=g[0]; p.lng=g[1]; result.active.push(p); } else residual.push({name:p.name,addr:p.addr,pref:p.pref}); });
-    const gen=result.generatedAt; LAST_GEN=gen; LAST_ACTIVE=result.active; RESIDUAL=residual;
-    ingStatus(`⑤ 反映中… 稼働${result.active.length.toLocaleString()}拠点`);
-    const d1=await postSet(gen,'main',result.active);
-    if(!d1.ok){ ingStatus('<span style="color:#f87171">反映失敗: '+(d1.error||'auth?')+'</span>'); return; }
-    await postSet(gen,'cx',result.cx);
-    await postSet(gen,'unresolved',residual);
-    cxLoaded=false; cxCache=[];
-    ingStatus(`✅ 反映しました：稼働 ${result.active.length.toLocaleString()} ／ 解約 ${result.cx.length.toLocaleString()}${residual.length?` ／ 座標未解決 ${residual.length}件` : ''}`);
-    await loadData(); await loadUnresolved();
+    // この端末で即表示（サーバ不要）
+    cxLoaded=false; cxCache=[]; ALL=result.active.slice();
+    document.getElementById('meta').textContent=`アップロード表示中 ／ 稼働 ${result.active.length.toLocaleString()} 拠点（生成 ${result.generatedAt}）`;
+    RESIDUAL=residual; LAST_ACTIVE=result.active; LAST_GEN=result.generatedAt;
+    SHARE={active:result.active,cx:result.cx,unresolved:residual,gen:result.generatedAt};
+    UNRESOLVED=residual; loadUnresolvedBtn();
+    buildFilters(); await apply();
+    ingStatus(`✅ この端末に表示しました：稼働 ${result.active.length.toLocaleString()} ／ 解約 ${result.cx.length.toLocaleString()}${residual.length?` ／ 未解決 ${residual.length}`:''}<br><a href="#" onclick="downloadShare();return false" style="color:#93c5fd;font-weight:700;">▼ 全員へ反映するデータをダウンロード</a>（管理者へ渡すと全員に反映）`);
   }catch(e){ ingStatus('<span style="color:#f87171">エラー: '+e.message+'</span>'); }
   finally{ document.getElementById('ingestBtn').disabled=false; }
 }
 document.getElementById('ingestBtn').onclick=ingest;
 
+let SHARE=null;
+function downloadShare(){
+  if(!SHARE) return;
+  const blob=new Blob([JSON.stringify(SHARE)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='map_update_'+String(SHARE.gen||'').replace(/[^0-9]/g,'')+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+window.downloadShare=downloadShare;
+function loadUnresolvedBtn(){ const b=document.getElementById('unresBtn'); if(b){ b.textContent=`⚠️ 座標未解決リスト（${UNRESOLVED.length}）`; b.style.display=UNRESOLVED.length?'block':'none'; } }
+
 // 未解決（新規住所）を必要な時だけGSIで補完して反映（任意・時間がかかる）
 async function fillUnresolvedViaGsi(){
   const btn=document.getElementById('unres-fill');
-  if(!RESIDUAL.length || !LAST_ACTIVE){ if(btn) btn.textContent='補完対象は今回のアップロード分のみ'; return; }
-  if(btn){ btn.disabled=true; }
+  if(!RESIDUAL.length){ if(btn) btn.textContent='補完対象は今回のアップロード分のみ'; return; }
+  if(btn) btn.disabled=true;
   const gc=await geocodePending(RESIDUAL,(i,n)=>{ if(btn) btn.textContent=`GSIで補完中… ${i}/${n}`; });
   if(gc.resolved.length){
-    LAST_ACTIVE=LAST_ACTIVE.concat(gc.resolved); RESIDUAL=gc.unresolved;
-    await postSet(LAST_GEN,'main',LAST_ACTIVE);
-    await postSet(LAST_GEN,'unresolved',RESIDUAL);
-    await loadData(); await loadUnresolved();
+    ALL=ALL.concat(gc.resolved); RESIDUAL=gc.unresolved; UNRESOLVED=gc.unresolved;
+    if(SHARE){ SHARE.active=(SHARE.active||[]).concat(gc.resolved); SHARE.unresolved=gc.unresolved; }
+    loadUnresolvedBtn(); buildColorUI(); await apply(); showUnresolved();
   }
-  if(btn){ btn.textContent=`GSIで座標を補完して反映（${gc.resolved.length}件補完）`; btn.disabled=false; }
+  if(btn){ btn.textContent=`GSIで座標を補完（${gc.resolved.length}件）`; btn.disabled=false; }
 }
 window.fillUnresolvedViaGsi=fillUnresolvedViaGsi;
 
@@ -624,7 +644,7 @@ document.getElementById('nearBtn').onclick=findNearest;
 // ===== 座標未解決リスト（閲覧）=====
 let UNRESOLVED=[];
 async function loadUnresolved(){
-  try{ const r=await fetch(BACKEND_URL+'?set=unresolved&t='+Date.now(),{redirect:'follow'}); const d=await r.json(); UNRESOLVED=d.points||[]; }
+  try{ const d=await fetchData('unresolved'); UNRESOLVED=d.points||[]; }
   catch(e){ UNRESOLVED=[]; }
   const b=document.getElementById('unresBtn');
   if(b){ b.textContent=`⚠️ 座標未解決リスト（${UNRESOLVED.length}）`; b.style.display=UNRESOLVED.length?'block':'none'; }
