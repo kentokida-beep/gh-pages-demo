@@ -90,6 +90,12 @@
       <select id="f-pref"><option value="">すべて</option></select>
     </div>
 
+    <div class="group">
+      <h2>拠点レイヤ（デポ・PC等）</h2>
+      <div class="chips" id="f-depot"></div>
+      <div style="font-size:10px;color:#64748b;margin-top:6px;">クリックで拠点の位置を重ねて表示</div>
+    </div>
+
     <div class="count" id="count"></div>
     <div class="foot" id="foot"></div>
   </div>
@@ -125,7 +131,18 @@ function checkPw(){
 window.checkPw=checkPw;
 
 let MAP, CLUSTER, ALL=[], ICONS={};
-const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'' };
+let cxLoaded=false, cxLoading=false, cxCache=[];      // 解約は遅延読込
+let DEPOTLAYER=null, DEPOTS=null, depotLoading=false; // デポ/PC等の拠点レイヤ
+const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set() };
+
+// 拠点レイヤ（デポ一覧）の見た目
+const DEPOT_STYLE = {
+  'デポ':   {c:'#111827', e:'🏠'},
+  'SDS':    {c:'#4b5563', e:'🚚'},
+  'PC':     {c:'#1d4ed8', e:'🏢'},
+  'メーカー':{c:'#92400e', e:'🏭'},
+  'サラスタ':{c:'#15803d', e:'🍜'}
+};
 
 function unlock(){
   document.getElementById('pw-overlay').style.display='none';
@@ -140,6 +157,7 @@ function initMap(){
   }).addTo(MAP);
   CLUSTER = L.markerClusterGroup({ chunkedLoading:true, spiderfyOnMaxZoom:true, maxClusterRadius:50 });
   MAP.addLayer(CLUSTER);
+  DEPOTLAYER = L.layerGroup().addTo(MAP); // 拠点は非クラスタで最前面に
 }
 
 function iconFor(kubun){
@@ -156,11 +174,12 @@ async function loadData(){
   try{
     const res = await fetch(BACKEND_URL+'?t='+Date.now(), {redirect:'follow'});
     const d = await res.json();
+    cxLoaded=false; cxCache=[]; // 解約は再取得
     ALL = (d.points||[]).filter(p=>typeof p.lat==='number' && typeof p.lng==='number');
     document.getElementById('meta').textContent =
-      `データ生成: ${d.generatedAt||'-'} ／ 拠点 ${ (d.stats&&d.stats.locations)||ALL.length } 件`;
+      `データ生成: ${d.generatedAt||'-'} ／ 稼働 ${ (d.stats&&d.stats.active_locations)||ALL.length } 拠点`;
     buildFilters();
-    apply();
+    await apply();
     const l=document.getElementById('loading'); if(l) l.remove();
   }catch(e){
     document.getElementById('loading').textContent = '取得エラー: '+e.message;
@@ -168,10 +187,12 @@ async function loadData(){
 }
 
 function buildFilters(){
-  // 区分
+  // 区分（稼働はデータから／「解約」は遅延読込チップとして常設・初期OFF）
   const kubuns=[...new Set(ALL.map(p=>p.kubun))].sort();
-  state.kubun = new Set(kubuns.filter(k=>k!=='解約')); // 解約は初期OFF
-  chips('f-kubun', kubuns, state.kubun, KUBUN_COLORS);
+  state.kubun = new Set(kubuns);
+  chips('f-kubun', [...kubuns, '解約'], state.kubun, KUBUN_COLORS);
+  // 拠点レイヤ（デポ/PC等）
+  chipsDepot();
   // プラン
   const plans=[...new Set(ALL.flatMap(p=>p.plans||[]))].sort();
   state.plan = new Set(plans);
@@ -180,7 +201,7 @@ function buildFilters(){
   chips('f-day', [...DAYS,'なし'], state.day, null);
   // 都道府県
   const prefs=[...new Set(ALL.map(p=>p.pref).filter(Boolean))].sort();
-  const sel=document.getElementById('f-pref');
+  const sel=document.getElementById('f-pref'); sel.innerHTML='<option value="">すべて</option>';
   prefs.forEach(pf=>{ const o=document.createElement('option'); o.value=pf; o.textContent=pf; sel.appendChild(o); });
   sel.onchange=()=>{ state.pref=sel.value; apply(); };
   document.getElementById('kw').oninput=(e)=>{ state.kw=e.target.value.trim(); apply(); };
@@ -216,7 +237,8 @@ function match(p){
   return true;
 }
 
-function apply(){
+async function apply(){
+  if(state.kubun.has('解約') && !cxLoaded){ await loadCx(); }
   const shown = ALL.filter(match);
   CLUSTER.clearLayers();
   const markers = shown.map(p=>{
@@ -226,6 +248,49 @@ function apply(){
   });
   CLUSTER.addLayers(markers);
   document.getElementById('count').textContent = `表示中: ${shown.length.toLocaleString()} 拠点`;
+}
+
+// 解約データは初回ONで取得（軽量化）
+async function loadCx(){
+  if(cxLoaded || cxLoading) return;
+  cxLoading=true;
+  const cnt=document.getElementById('count'); if(cnt) cnt.textContent='解約データ取得中…';
+  try{
+    const r=await fetch(BACKEND_URL+'?set=cx&t='+Date.now(),{redirect:'follow'});
+    const d=await r.json();
+    cxCache=(d.points||[]).filter(p=>typeof p.lat==='number'&&typeof p.lng==='number');
+    ALL=ALL.concat(cxCache); cxLoaded=true;
+  }catch(e){}
+  cxLoading=false;
+}
+
+// ===== 拠点レイヤ（デポ/PC等）=====
+function chipsDepot(){
+  const box=document.getElementById('f-depot'); box.innerHTML='';
+  Object.keys(DEPOT_STYLE).forEach(t=>{
+    const el=document.createElement('span'); el.className='chip'+(state.depotTypes.has(t)?' on':'');
+    el.innerHTML=`<span class="dot" style="background:${DEPOT_STYLE[t].c}"></span><span>${DEPOT_STYLE[t].e} ${t}</span>`;
+    el.onclick=async()=>{ state.depotTypes.has(t)?state.depotTypes.delete(t):state.depotTypes.add(t); el.classList.toggle('on'); await ensureDepots(); renderDepots(); };
+    box.appendChild(el);
+  });
+}
+async function ensureDepots(){
+  if(DEPOTS || depotLoading || !state.depotTypes.size) return;
+  depotLoading=true;
+  try{ const r=await fetch(BACKEND_URL+'?set=depot&t='+Date.now(),{redirect:'follow'}); const d=await r.json(); DEPOTS=d.points||[]; }
+  catch(e){ DEPOTS=[]; }
+  depotLoading=false;
+}
+function renderDepots(){
+  DEPOTLAYER.clearLayers();
+  if(!DEPOTS) return;
+  DEPOTS.filter(p=>state.depotTypes.has(p.type)).forEach(p=>{
+    const st=DEPOT_STYLE[p.type]||{c:'#000',e:'📍'};
+    const ic=L.divIcon({className:'',html:`<div style="font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">${st.e}</div>`,iconSize:[24,24],iconAnchor:[12,12],popupAnchor:[0,-12]});
+    L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:1000})
+      .bindPopup(`<div class="lp"><b>${esc(p.name)}</b><table><tr><td class="k">種別</td><td>${esc(p.type)}</td></tr><tr><td class="k">住所</td><td>${esc(p.addr)}</td></tr></table></div>`)
+      .addTo(DEPOTLAYER);
+  });
 }
 
 function popupHtml(p){
@@ -291,15 +356,15 @@ function transformRows(rows){
     if(depot)L.any_dep.add(depot); if(pc)L.any_pc.add(pc);
     if(!cancel){ L.cancelled=false; L.status=status; if(depot)L.act_dep.add(depot); if(pc)L.act_pc.add(pc); if(plan)L.plans.add(plan); days.forEach(d=>L.days.add(d)); const c=toNum(g(row,'count')); if(c!=null)L.count+=Math.round(c); }
   }
-  const pts=[];
+  const active=[], cx=[];
   for(const k in byloc){ const L=byloc[k];
-    if(L.cancelled) pts.push({name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:'解約',status:'解約',depot:'',pc:'',plans:[],days:[],count:''});
-    else pts.push({name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:classifySets(L.act_dep,L.act_pc),status:L.status,depot:[...L.act_dep].sort().join(' / '),pc:[...L.act_pc].sort().join(' / '),plans:[...L.plans].sort(),days:['月','火','水','木','金'].filter(d=>L.days.has(d)),count:L.count});
+    if(L.cancelled) cx.push({name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:'解約',status:'解約',depot:'',pc:'',plans:[],days:[],count:''});
+    else active.push({name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:classifySets(L.act_dep,L.act_pc),status:L.status,depot:[...L.act_dep].sort().join(' / '),pc:[...L.act_pc].sort().join(' / '),plans:[...L.plans].sort(),days:['月','火','水','木','金'].filter(d=>L.days.has(d)),count:L.count});
   }
-  stats.locations=pts.length; stats.active_locations=pts.filter(p=>p.kubun!=='解約').length;
+  stats.locations=active.length+cx.length; stats.active_locations=active.length; stats.cancelled_locations=cx.length;
   const now=new Date(), p2=n=>String(n).padStart(2,'0');
-  stats.generatedAt=`${now.getFullYear()}/${p2(now.getMonth()+1)}/${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
-  return {generatedAt:stats.generatedAt,points:pts,stats:stats};
+  const gen=`${now.getFullYear()}/${p2(now.getMonth()+1)}/${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
+  return {generatedAt:gen, active, cx, stats};
 }
 async function ingest(){
   const f=document.getElementById('csvfile').files[0];
@@ -309,11 +374,16 @@ async function ingest(){
     ingStatus('① CSV読み込み中…'); const text=await decodeCsv(f);
     ingStatus('② 解析中…'); const parsed=Papa.parse(text,{skipEmptyLines:true});
     ingStatus('③ 変換中…'); const result=transformRows(parsed.data);
+    const gen=result.generatedAt;
+    const post=(set,pts)=>fetch(BACKEND_URL,{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({pw:PW,set:set,json:JSON.stringify({generatedAt:gen,points:pts,stats:{locations:pts.length}})})}).then(r=>r.json());
     ingStatus(`④ 送信中… 稼働${result.stats.active_locations.toLocaleString()}拠点`);
-    const res=await fetch(BACKEND_URL,{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain'},body:JSON.stringify({pw:PW,json:JSON.stringify(result)})});
-    const d=await res.json();
-    if(d.ok){ ingStatus(`✅ 更新完了：${d.locations.toLocaleString()}拠点を反映（座標なし${result.stats.dropped_noCoord.toLocaleString()}件は未表示）`); await loadData(); }
-    else ingStatus('<span style="color:#f87171">更新失敗: '+(d.error||'')+'</span>');
+    const d1=await post('main', result.active);
+    if(!d1.ok){ ingStatus('<span style="color:#f87171">更新失敗(稼働): '+(d1.error||'')+'</span>'); return; }
+    ingStatus('④ 送信中… 解約データ…');
+    const d2=await post('cx', result.cx);
+    if(d2.ok){ cxLoaded=false; cxCache=[]; ingStatus(`✅ 更新完了：稼働${result.stats.active_locations.toLocaleString()} ／ 解約${result.stats.cancelled_locations.toLocaleString()}拠点（座標なし${result.stats.dropped_noCoord.toLocaleString()}件は未表示）`); await loadData(); }
+    else ingStatus('<span style="color:#f87171">更新失敗(解約): '+(d2.error||'')+'</span>');
   }catch(e){ ingStatus('<span style="color:#f87171">エラー: '+e.message+'</span>'); }
   finally{ btn.disabled=false; }
 }
