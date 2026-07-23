@@ -36,6 +36,11 @@
   #pw-overlay input{ width:100%; padding:10px 14px; border:2px solid #e2e8f0; border-radius:8px; font-size:16px; text-align:center; outline:none; margin-bottom:12px; color:#0f172a; background:#fff; }
   #pw-overlay button{ width:100%; border:none; border-radius:8px; padding:10px; font-size:14px; font-weight:700; background:#1d4ed8; color:#fff; cursor:pointer; }
   #loading{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:800; background:#fff; color:#0f172a; padding:14px 20px; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,.2); font-size:13px; }
+  details.sec{ border-top:1px solid #1e293b; margin-top:14px; }
+  details.sec>summary{ cursor:pointer; list-style:none; padding:12px 0 4px; font-weight:700; font-size:13px; color:#cbd5e1; user-select:none; }
+  details.sec>summary::-webkit-details-marker{ display:none; }
+  details.sec>summary::before{ content:"▸"; color:#64748b; margin-right:7px; display:inline-block; }
+  details.sec[open]>summary::before{ content:"▾"; }
   @media(max-width:640px){ #app{ flex-direction:column; } #sidebar{ width:100%; flex:0 0 auto; max-height:42%; } }
   #unres-modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; display:none; align-items:center; justify-content:center; }
   #unres-modal .card{ background:#fff; color:#0f172a; border-radius:12px; width:min(760px,92vw); max-height:82vh; display:flex; flex-direction:column; overflow:hidden; }
@@ -80,14 +85,16 @@
     <h1>🗺️ 配送エリアマップ</h1>
     <div class="sub" id="meta">読み込み中…</div>
 
-    <div class="group" id="update-box" style="background:#111c33;border:1px solid #1e3a5f;border-radius:10px;padding:12px;">
-      <h2>🔄 CMSデータで更新</h2>
+    <details class="sec"><summary>⚙️ CMSデータで更新（管理者）</summary>
+    <div class="group" id="update-box" style="background:#111c33;border:1px solid #1e3a5f;border-radius:10px;padding:12px;margin-top:10px;">
+      <h2 style="display:none;">CMSデータで更新</h2>
       <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;line-height:1.5;">CMSからDLしたCSVを選び「地図を更新」を押すと、全員の地図に反映されます。</div>
       <input type="file" id="csvfile" accept=".csv,text/csv" style="font-size:12px;color:#cbd5e1;width:100%;">
       <button id="ingestBtn" style="margin-top:8px;width:100%;padding:9px;border:none;border-radius:8px;background:#059669;color:#fff;font-weight:700;cursor:pointer;">この内容で地図を更新</button>
       <div id="ingest-status" style="font-size:11px;color:#cbd5e1;margin-top:8px;line-height:1.6;"></div>
       <button id="unresBtn" style="display:none;margin-top:8px;width:100%;padding:7px;border:1px solid #b45309;border-radius:8px;background:#78350f;color:#fde68a;font-size:12px;font-weight:700;cursor:pointer;">⚠️ 座標未解決リスト</button>
     </div>
+    </details>
 
     <div class="group">
       <h2>キーワード（企業名・住所）</h2>
@@ -102,7 +109,8 @@
       <div id="near-result" style="margin-top:10px;font-size:12px;"></div>
     </div>
 
-    <div class="group">
+    <details class="sec"><summary>🔍 絞り込み・色分け（詳細）</summary>
+    <div class="group" style="margin-top:10px;">
       <h2>ピンの色分け</h2>
       <div class="chips" id="f-colormode"></div>
       <div id="color-legend" style="display:none;max-height:220px;overflow:auto;margin-top:8px;font-size:11px;"></div>
@@ -143,6 +151,7 @@
       <div class="chips" id="f-depot"></div>
       <div style="font-size:10px;color:#64748b;margin-top:6px;">クリックで拠点の位置を重ねて表示</div>
     </div>
+    </details>
 
     <div class="count" id="count"></div>
     <div class="foot" id="foot"></div>
@@ -620,6 +629,13 @@ function distKm(a,b){
   const s=Math.sin(dLat/2)**2 + Math.cos(toR(a[0]))*Math.cos(toR(b[0]))*Math.sin(dLng/2)**2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(s)));
 }
+function nearPopup(p,d,rank){
+  const days=(p.days||[]).length ? (p.days.join('・')+'曜') : '曜日指定なし';
+  const detail=[p.depot,p.pc].filter(Boolean).join(' ／ ');
+  const row=(k,v)=> v?`<tr><td class="k">${k}</td><td>${esc(v)}</td></tr>`:'';
+  return `<div class="lp"><b>${rank}. ${esc(p.name)}</b> <span style="color:#64748b">${esc(p.floor||'')}</span>
+    <table>${row('距離','直線 '+d.toFixed(d<10?1:0)+' km')}${row('配送区分',p.kubun)}${row('配達曜日',days)}${row('デポ/PC',detail)}</table></div>`;
+}
 async function findNearest(){
   const q=document.getElementById('nearAddr').value.trim();
   const box=document.getElementById('near-result');
@@ -630,13 +646,19 @@ async function findNearest(){
   const cands=ALL.filter(p=>p.kubun!=='解約');
   if(!cands.length){ box.innerHTML='データがまだ読み込まれていません。'; return; }
   const top=cands.map(p=>({p,d:distKm(g,[p.lat,p.lng])})).sort((a,b)=>a.d-b.d).slice(0,3);
-  // 地図に検索地点＋最寄りへの線
+  // 地図に検索地点＋最寄り上位を①②③で表示、各社への線も
   SEARCHLAYER.clearLayers();
-  const here=L.marker(g,{icon:L.divIcon({className:'',html:'<div style="font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">📍</div>',iconSize:[28,28],iconAnchor:[14,28],popupAnchor:[0,-26]}),zIndexOffset:2000}).bindPopup('<b>検索地点</b><br>'+esc(q));
+  const here=L.marker(g,{icon:L.divIcon({className:'',html:'<div style="font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">📍</div>',iconSize:[28,28],iconAnchor:[14,28],popupAnchor:[0,-26]}),zIndexOffset:3000}).bindPopup('<b>検索地点</b><br>'+esc(q));
   here.addTo(SEARCHLAYER);
-  const n=top[0];
-  L.polyline([g,[n.p.lat,n.p.lng]],{color:'#0d9488',weight:2.5,dashArray:'6,6'}).addTo(SEARCHLAYER);
-  MAP.fitBounds([g,[n.p.lat,n.p.lng]],{padding:[70,70],maxZoom:14});
+  const bounds=[g];
+  top.forEach((s,i)=>{
+    const p=s.p, c=KUBUN_COLORS[p.kubun]||'#f59e0b';
+    L.polyline([g,[p.lat,p.lng]],{color:'#0d9488',weight:2,dashArray:'5,6',opacity:.7}).addTo(SEARCHLAYER);
+    const ic=L.divIcon({className:'',html:`<div style="width:24px;height:24px;border-radius:50%;background:${c};border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px;">${i+1}</div>`,iconSize:[24,24],iconAnchor:[12,12],popupAnchor:[0,-12]});
+    L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:2500}).bindPopup(nearPopup(p,s.d,i+1)).addTo(SEARCHLAYER);
+    bounds.push([p.lat,p.lng]);
+  });
+  MAP.fitBounds(bounds,{padding:[70,70],maxZoom:15});
   here.openPopup();
   // 結果カード（最寄り3件）
   const rank=['🥇','🥈','🥉'];
