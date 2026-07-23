@@ -94,6 +94,14 @@
       <input type="text" id="kw" placeholder="例：渋谷 / 医療法人…">
     </div>
 
+    <div class="group" style="background:#111c33;border:1px solid #1e3a5f;border-radius:10px;padding:12px;">
+      <h2>📍 住所から最寄り契約企業</h2>
+      <div style="font-size:11px;color:#94a3b8;margin:2px 0 8px;line-height:1.5;">住所を入れると、最寄りの契約企業・直線距離・配達曜日・配送方法を表示します。</div>
+      <input type="text" id="nearAddr" placeholder="例：渋谷区道玄坂1-2-3" onkeypress="if(event.key==='Enter')findNearest()">
+      <button id="nearBtn" style="margin-top:8px;width:100%;padding:8px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-weight:700;cursor:pointer;">最寄りを検索</button>
+      <div id="near-result" style="margin-top:10px;font-size:12px;"></div>
+    </div>
+
     <div class="group">
       <h2>ピンの色分け</h2>
       <div class="chips" id="f-colormode"></div>
@@ -173,6 +181,7 @@ window.checkPw=checkPw;
 let MAP, CLUSTER, ALL=[], ICONS={};
 let cxLoaded=false, cxLoading=false, cxCache=[];      // 解約は遅延読込
 let DEPOTLAYER=null, DEPOTS=null, depotLoading=false; // デポ/PC等の拠点レイヤ
+let SEARCHLAYER=null; // 最寄り検索の地点・線
 const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', pcFilter:'' };
 
 // デポ色分け用パレット（見分けやすい24色を循環）
@@ -216,6 +225,7 @@ function initMap(){
   CLUSTER = L.markerClusterGroup({ chunkedLoading:true, spiderfyOnMaxZoom:true, maxClusterRadius:50 });
   MAP.addLayer(CLUSTER);
   DEPOTLAYER = L.layerGroup().addTo(MAP); // 拠点は非クラスタで最前面に
+  SEARCHLAYER = L.layerGroup().addTo(MAP); // 最寄り検索の地点・線
 }
 
 function iconForColor(c){
@@ -559,6 +569,48 @@ async function fillUnresolvedViaGsi(){
   if(btn){ btn.textContent=`GSIで座標を補完して反映（${gc.resolved.length}件補完）`; btn.disabled=false; }
 }
 window.fillUnresolvedViaGsi=fillUnresolvedViaGsi;
+
+// ===== 住所から最寄りの契約企業を検索 =====
+function distKm(a,b){
+  const R=6371, toR=x=>x*Math.PI/180;
+  const dLat=toR(b[0]-a[0]), dLng=toR(b[1]-a[1]);
+  const s=Math.sin(dLat/2)**2 + Math.cos(toR(a[0]))*Math.cos(toR(b[0]))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(s)));
+}
+async function findNearest(){
+  const q=document.getElementById('nearAddr').value.trim();
+  const box=document.getElementById('near-result');
+  if(!q){ box.innerHTML=''; SEARCHLAYER.clearLayers(); return; }
+  box.innerHTML='検索中…';
+  const g=await geocodeOne(q);
+  if(!g){ box.innerHTML='<span style="color:#f87171">住所から位置を特定できませんでした。市区町村＋番地の形で入れてみてください。</span>'; return; }
+  const cands=ALL.filter(p=>p.kubun!=='解約');
+  if(!cands.length){ box.innerHTML='データがまだ読み込まれていません。'; return; }
+  const top=cands.map(p=>({p,d:distKm(g,[p.lat,p.lng])})).sort((a,b)=>a.d-b.d).slice(0,3);
+  // 地図に検索地点＋最寄りへの線
+  SEARCHLAYER.clearLayers();
+  const here=L.marker(g,{icon:L.divIcon({className:'',html:'<div style="font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">📍</div>',iconSize:[28,28],iconAnchor:[14,28],popupAnchor:[0,-26]}),zIndexOffset:2000}).bindPopup('<b>検索地点</b><br>'+esc(q));
+  here.addTo(SEARCHLAYER);
+  const n=top[0];
+  L.polyline([g,[n.p.lat,n.p.lng]],{color:'#0d9488',weight:2.5,dashArray:'6,6'}).addTo(SEARCHLAYER);
+  MAP.fitBounds([g,[n.p.lat,n.p.lng]],{padding:[70,70],maxZoom:14});
+  here.openPopup();
+  // 結果カード（最寄り3件）
+  const rank=['🥇','🥈','🥉'];
+  box.innerHTML=top.map((s,i)=>{
+    const p=s.p, c=KUBUN_COLORS[p.kubun]||'#f59e0b';
+    const days=(p.days||[]).length ? (p.days.join('・')+'曜') : '曜日指定なし';
+    const detail=[p.depot,p.pc].filter(Boolean).join(' ／ ');
+    return `<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+      <div style="font-weight:700;">${rank[i]} ${esc(p.name)} <span style="color:#94a3b8;font-weight:400;">${esc(p.floor||'')}</span></div>
+      <div style="color:#e2e8f0;margin-top:2px;">直線距離 <b>${s.d.toFixed(s.d<10?1:0)} km</b></div>
+      <div style="margin-top:3px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px;vertical-align:-1px;"></span>${esc(p.kubun)} ／ ${days}</div>
+      ${detail?`<div style="color:#94a3b8;margin-top:2px;">${esc(detail)}</div>`:''}
+    </div>`;
+  }).join('');
+}
+window.findNearest=findNearest;
+document.getElementById('nearBtn').onclick=findNearest;
 
 // ===== 座標未解決リスト（閲覧）=====
 let UNRESOLVED=[];
