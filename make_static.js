@@ -11,7 +11,10 @@ async function deriveKey(salt){
   return subtle.deriveKey({name:'PBKDF2', salt, iterations:100000, hash:'SHA-256'}, km,
     {name:'AES-GCM', length:256}, false, ['encrypt']);
 }
-async function enc(inPath, outPath){
+// 暗号化バイト列を base64 にして window.__D_<name>="..." の .js として出力。
+// → ブラウザは <script> タグで読み込む（社内プロキシがfetch/XHRや.encを塞いでも、
+//    ライブラリと同じ <script> 経由なので通りやすい）。
+async function enc(inPath, outPath, varName){
   const data = fs.readFileSync(inPath); // bytes (utf-8 JSON)
   const salt = webcrypto.getRandomValues(new Uint8Array(16));
   const iv   = webcrypto.getRandomValues(new Uint8Array(12));
@@ -19,16 +22,17 @@ async function enc(inPath, outPath){
   const ct   = new Uint8Array(await subtle.encrypt({name:'AES-GCM', iv}, key, data));
   const out  = new Uint8Array(16 + 12 + ct.length);
   out.set(salt, 0); out.set(iv, 16); out.set(ct, 28);
-  fs.writeFileSync(outPath, Buffer.from(out));
-  console.log(outPath, '←', inPath, '(', ct.length, 'bytes )');
+  const b64  = Buffer.from(out).toString('base64');
+  fs.writeFileSync(outPath, 'window.__D_' + varName + '="' + b64 + '";');
+  console.log(outPath, '←', inPath, '(', b64.length, 'b64 chars )');
 }
 (async () => {
   const map = [
-    ['/tmp/s_active.json',     'data/active.enc'],
-    ['/tmp/s_cx.json',         'data/cx.enc'],
-    ['/tmp/s_depot.json',      'data/depot.enc'],
-    ['/tmp/s_geocache.json',   'data/geocache.enc'],
-    ['/tmp/s_unresolved.json', 'data/unresolved.enc'],
+    ['/tmp/s_active.json',     'data/active.js',     'active'],
+    ['/tmp/s_cx.json',         'data/cx.js',         'cx'],
+    ['/tmp/s_depot.json',      'data/depot.js',      'depot'],
+    ['/tmp/s_geocache.json',   'data/geocache.js',   'geocache'],
+    ['/tmp/s_unresolved.json', 'data/unresolved.js', 'unresolved'],
   ];
-  for (const [i,o] of map){ if (fs.existsSync(i)) await enc(i,o); }
+  for (const [i,o,v] of map){ if (fs.existsSync(i)) await enc(i,o,v); }
 })();

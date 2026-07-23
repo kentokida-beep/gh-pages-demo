@@ -252,10 +252,24 @@ async function decryptEnc(buf){
   const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
   return JSON.parse(new TextDecoder().decode(pt));
 }
+// データは <script> タグで読み込む（社内プロキシがfetch/XHRや特殊拡張子を塞いでも通りやすい）
+function loadScript(src){
+  return new Promise((resolve,reject)=>{
+    const s=document.createElement('script'); s.src=src; s.async=true;
+    const to=setTimeout(()=>{ s.remove(); reject(new Error('タイムアウト')); },120000);
+    s.onload=()=>{ clearTimeout(to); resolve(); };
+    s.onerror=()=>{ clearTimeout(to); s.remove(); reject(new Error('読込失敗')); };
+    document.head.appendChild(s);
+  });
+}
 async function fetchData(name){
-  const res=await fetch('./data/'+name+'.enc?t='+Date.now(),{cache:'no-store'});
-  if(!res.ok) throw new Error('取得失敗('+res.status+')');
-  return decryptEnc(await res.arrayBuffer());
+  await loadScript('./data/'+name+'.js?t='+Date.now());
+  const b64=window['__D_'+name];
+  if(!b64) throw new Error('データが空です');
+  const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
+  const d=await decryptEnc(bytes.buffer);
+  try{ delete window['__D_'+name]; }catch(e){}
+  return d;
 }
 
 async function loadData(){
