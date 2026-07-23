@@ -96,12 +96,17 @@
     <div class="group">
       <h2>ピンの色分け</h2>
       <div class="chips" id="f-colormode"></div>
+      <div id="color-legend" style="display:none;max-height:220px;overflow:auto;margin-top:8px;font-size:11px;"></div>
     </div>
 
     <div class="group">
       <h2>担当デポ / SDS で絞り込み</h2>
       <select id="f-depotfilter"><option value="">すべて表示</option></select>
-      <div id="depot-legend" style="display:none;max-height:220px;overflow:auto;margin-top:8px;font-size:11px;"></div>
+    </div>
+
+    <div class="group">
+      <h2>発送元PC で絞り込み</h2>
+      <select id="f-pcfilter"><option value="">すべて表示</option></select>
     </div>
 
     <div class="group">
@@ -167,12 +172,12 @@ window.checkPw=checkPw;
 let MAP, CLUSTER, ALL=[], ICONS={};
 let cxLoaded=false, cxLoading=false, cxCache=[];      // 解約は遅延読込
 let DEPOTLAYER=null, DEPOTS=null, depotLoading=false; // デポ/PC等の拠点レイヤ
-const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'' };
+const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', pcFilter:'' };
 
 // デポ色分け用パレット（見分けやすい24色を循環）
 const PALETTE = ['#e6194B','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#800000','#aaffc3','#808000','#ffd8b1','#000075','#a9a9a9','#e6beff','#ff4500','#1e90ff','#228B22','#b03060','#00ced1'];
-let DEPOT_COLORS = {};   // 担当デポ名 -> 色
-let DEPOT_COUNTS = {};   // 担当デポ名 -> 件数
+let DEPOT_COLORS = {}, DEPOT_COUNTS = {};   // 担当デポ名 -> 色/件数
+let PC_COLORS = {}, PC_COUNTS = {};         // PC名 -> 色/件数
 
 // 併記(「/」)から実デポ/SDS名を1つ取り出す（宅急便/宅配/メーカー/冷凍を含む語は除外）
 function primaryDepot(p){
@@ -180,6 +185,12 @@ function primaryDepot(p){
   const real=toks.find(t=>t.indexOf('宅急便')<0&&t.indexOf('宅配')<0&&t.indexOf('メーカー')<0&&t.indexOf('冷凍')<0);
   return real || toks[0] || '（デポ指定なし）';
 }
+// 発送元PC（ピッキングセンター）を1つ取り出す
+function primaryPC(p){
+  const toks=(p.pc||'').split(' / ').map(s=>s.trim()).filter(Boolean);
+  return toks[0] || '（PC指定なし）';
+}
+function keyOf(p){ return state.colorMode==='pc' ? primaryPC(p) : primaryDepot(p); }
 
 // 拠点レイヤ（デポ一覧）の見た目
 const DEPOT_STYLE = {
@@ -216,7 +227,9 @@ function iconForColor(c){
   ICONS[c]=ic; return ic;
 }
 function colorOf(p){
-  return state.colorMode==='depot' ? (DEPOT_COLORS[primaryDepot(p)]||'#a9a9a9') : (KUBUN_COLORS[p.kubun]||'#f59e0b');
+  if(state.colorMode==='depot') return DEPOT_COLORS[primaryDepot(p)]||'#a9a9a9';
+  if(state.colorMode==='pc')    return PC_COLORS[primaryPC(p)]||'#a9a9a9';
+  return KUBUN_COLORS[p.kubun]||'#f59e0b';
 }
 
 async function loadData(){
@@ -272,6 +285,7 @@ function chips(containerId, items, set, colors){
 function match(p){
   if(!state.kubun.has(p.kubun)) return false;
   if(state.depotFilter && primaryDepot(p)!==state.depotFilter) return false;
+  if(state.pcFilter && primaryPC(p)!==state.pcFilter) return false;
   if(state.pref && p.pref!==state.pref) return false;
   // プラン：点のプランのいずれかが選択されていればOK。プラン情報なしは常に表示。
   if((p.plans||[]).length){
@@ -293,7 +307,7 @@ async function apply(){
   const shown = ALL.filter(match);
   CLUSTER.clearLayers();
   const markers = shown.map(p=>{
-    const m=L.marker([p.lat,p.lng],{icon:iconForColor(colorOf(p))});
+    const m=L.circleMarker([p.lat,p.lng],{radius:6,weight:1,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.9});
     m.bindPopup(popupHtml(p),{maxWidth:320});
     return m;
   });
@@ -344,29 +358,43 @@ function renderDepots(){
   });
 }
 
-// ===== ピンの色分け（配送区分 / 担当デポ）＋ デポ絞り込み・凡例 =====
+// ===== ピンの色分け（配送区分 / 担当デポ / PC）＋ デポ・PC絞り込み・凡例 =====
+function tally(keyFn){
+  const cnt={}; ALL.forEach(p=>{ if(p.kubun==='解約') return; const k=keyFn(p); cnt[k]=(cnt[k]||0)+1; });
+  const keys=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
+  const col={}; keys.forEach((k,i)=>col[k]=PALETTE[i%PALETTE.length]);
+  return {cnt,keys,col};
+}
+function fillSelect(id,keys,cnt,cur,onch){
+  const sel=document.getElementById(id);
+  sel.innerHTML='<option value="">すべて表示</option>'+keys.map(k=>`<option value="${k.replace(/"/g,'')}">${k}（${cnt[k]}）</option>`).join('');
+  sel.value=cur; sel.onchange=()=>onch(sel.value);
+}
 function buildColorUI(){
+  // 色分けモード
   const cm=document.getElementById('f-colormode'); cm.innerHTML='';
-  [['kubun','配送区分で色分け'],['depot','担当デポで色分け']].forEach(([v,label])=>{
+  [['kubun','配送区分'],['depot','担当デポ/SDS'],['pc','発送元PC']].forEach(([v,label])=>{
     const el=document.createElement('span'); el.className='chip'+(state.colorMode===v?' on':'');
     el.textContent=label;
     el.onclick=()=>{ state.colorMode=v; buildColorUI(); apply(); };
     cm.appendChild(el);
   });
-  // 担当デポ集計＋色割当（件数の多い順・稼働のみ）
-  DEPOT_COUNTS={};
-  ALL.forEach(p=>{ if(p.kubun==='解約') return; const d=primaryDepot(p); DEPOT_COUNTS[d]=(DEPOT_COUNTS[d]||0)+1; });
-  const depots=Object.keys(DEPOT_COUNTS).sort((a,b)=>DEPOT_COUNTS[b]-DEPOT_COUNTS[a]);
-  DEPOT_COLORS={}; depots.forEach((d,i)=>DEPOT_COLORS[d]=PALETTE[i%PALETTE.length]);
+  // 集計・色割当（稼働のみ・件数降順）
+  const dp=tally(primaryDepot); DEPOT_COUNTS=dp.cnt; DEPOT_COLORS=dp.col;
+  const pc=tally(primaryPC);    PC_COUNTS=pc.cnt;    PC_COLORS=pc.col;
   // 絞り込みドロップダウン
-  const sel=document.getElementById('f-depotfilter'), cur=state.depotFilter;
-  sel.innerHTML='<option value="">すべて表示</option>'+depots.map(d=>`<option value="${d.replace(/"/g,'')}">${d}（${DEPOT_COUNTS[d]}）</option>`).join('');
-  sel.value=cur; sel.onchange=()=>{ state.depotFilter=sel.value; apply(); };
-  // 凡例（クリックでそのデポに絞り込み）
-  const lg=document.getElementById('depot-legend');
-  lg.innerHTML=depots.map(d=>`<div class="legrow" data-d="${d.replace(/"/g,'')}" style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;"><span style="width:12px;height:12px;border-radius:3px;background:${DEPOT_COLORS[d]};flex:0 0 12px;"></span><span>${d}（${DEPOT_COUNTS[d]}）</span></div>`).join('');
-  lg.querySelectorAll('.legrow').forEach(el=>el.onclick=()=>{ state.depotFilter=el.getAttribute('data-d'); document.getElementById('f-depotfilter').value=state.depotFilter; apply(); });
-  lg.style.display=(state.colorMode==='depot')?'block':'none';
+  fillSelect('f-depotfilter', dp.keys, dp.cnt, state.depotFilter, v=>{ state.depotFilter=v; apply(); });
+  fillSelect('f-pcfilter',    pc.keys, pc.cnt, state.pcFilter,    v=>{ state.pcFilter=v;    apply(); });
+  // 凡例（色分けモードに応じてデポ or PC を表示、クリックで絞り込み）
+  const lg=document.getElementById('color-legend');
+  if(state.colorMode==='depot'||state.colorMode==='pc'){
+    const t=(state.colorMode==='pc')?pc:dp, selId=(state.colorMode==='pc')?'f-pcfilter':'f-depotfilter';
+    lg.innerHTML=t.keys.map(k=>`<div class="legrow" data-k="${k.replace(/"/g,'')}" style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;"><span style="width:12px;height:12px;border-radius:3px;background:${t.col[k]};flex:0 0 12px;"></span><span>${k}（${t.cnt[k]}）</span></div>`).join('');
+    lg.querySelectorAll('.legrow').forEach(el=>el.onclick=()=>{ const k=el.getAttribute('data-k');
+      if(state.colorMode==='pc'){ state.pcFilter=k; } else { state.depotFilter=k; }
+      document.getElementById(selId).value=k; apply(); });
+    lg.style.display='block';
+  } else { lg.style.display='none'; }
 }
 
 function popupHtml(p){
