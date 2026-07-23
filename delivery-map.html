@@ -191,6 +191,9 @@ let MAP, CLUSTER, ALL=[], ICONS={};
 let cxLoaded=false, cxLoading=false, cxCache=[];      // 解約は遅延読込
 let DEPOTLAYER=null, DEPOTS=null, depotLoading=false; // デポ/PC等の拠点レイヤ
 let SEARCHLAYER=null; // 最寄り検索の地点・線
+let NEAR_MARKERS=[];  // 最寄り上位のマーカー（カードクリックで移動）
+function focusNear(i){ const m=NEAR_MARKERS[i]; if(!m) return; MAP.setView(m.getLatLng(),16,{animate:true}); m.openPopup(); }
+window.focusNear=focusNear;
 const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', pcFilter:'' };
 
 // デポ色分け用パレット（見分けやすい24色を循環）
@@ -650,12 +653,13 @@ async function findNearest(){
   SEARCHLAYER.clearLayers();
   const here=L.marker(g,{icon:L.divIcon({className:'',html:'<div style="font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">📍</div>',iconSize:[28,28],iconAnchor:[14,28],popupAnchor:[0,-26]}),zIndexOffset:3000}).bindPopup('<b>検索地点</b><br>'+esc(q));
   here.addTo(SEARCHLAYER);
+  NEAR_MARKERS=[];
   const bounds=[g];
   top.forEach((s,i)=>{
     const p=s.p, c=KUBUN_COLORS[p.kubun]||'#f59e0b';
     L.polyline([g,[p.lat,p.lng]],{color:'#0d9488',weight:2,dashArray:'5,6',opacity:.7}).addTo(SEARCHLAYER);
     const ic=L.divIcon({className:'',html:`<div style="width:24px;height:24px;border-radius:50%;background:${c};border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px;">${i+1}</div>`,iconSize:[24,24],iconAnchor:[12,12],popupAnchor:[0,-12]});
-    L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:2500}).bindPopup(nearPopup(p,s.d,i+1)).addTo(SEARCHLAYER);
+    NEAR_MARKERS[i]=L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:2500}).bindPopup(nearPopup(p,s.d,i+1)).addTo(SEARCHLAYER);
     bounds.push([p.lat,p.lng]);
   });
   MAP.fitBounds(bounds,{padding:[70,70],maxZoom:15});
@@ -666,11 +670,12 @@ async function findNearest(){
     const p=s.p, c=KUBUN_COLORS[p.kubun]||'#f59e0b';
     const days=(p.days||[]).length ? (p.days.join('・')+'曜') : '曜日指定なし';
     const detail=[p.depot,p.pc].filter(Boolean).join(' ／ ');
-    return `<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+    return `<div onclick="focusNear(${i})" title="クリックで地図をここへ移動" style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;">
       <div style="font-weight:700;">${rank[i]} ${esc(p.name)} <span style="color:#94a3b8;font-weight:400;">${esc(p.floor||'')}</span></div>
       <div style="color:#e2e8f0;margin-top:2px;">直線距離 <b>${s.d.toFixed(s.d<10?1:0)} km</b></div>
       <div style="margin-top:3px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px;vertical-align:-1px;"></span>${esc(p.kubun)} ／ ${days}</div>
       ${detail?`<div style="color:#94a3b8;margin-top:2px;">${esc(detail)}</div>`:''}
+      <div style="text-align:right;color:#5eead4;font-size:11px;margin-top:3px;">地図で表示 ›</div>
     </div>`;
   }).join('');
 }
