@@ -42,7 +42,7 @@
   details.sec>summary::before{ content:"▸"; color:#64748b; margin-right:7px; display:inline-block; }
   details.sec[open]>summary::before{ content:"▾"; }
   /* 地図タイルを淡く＝地名などを目立たせず、色付きピンを際立たせる */
-  .leaflet-tile-pane{ filter:grayscale(0.4) brightness(1.06) opacity(0.88); }
+  .leaflet-tile-pane{ filter:grayscale(0.7) brightness(1.13) contrast(0.9) opacity(0.9); }
   @media(max-width:640px){ #app{ flex-direction:column; } #sidebar{ width:100%; flex:0 0 auto; max-height:42%; } }
   #unres-modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; display:none; align-items:center; justify-content:center; }
   #unres-modal .card{ background:#fff; color:#0f172a; border-radius:12px; width:min(760px,92vw); max-height:82vh; display:flex; flex-direction:column; overflow:hidden; }
@@ -236,7 +236,7 @@ function initMap(){
   L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{
     maxZoom:18, attribution:'地理院タイル'
   }).addTo(MAP);
-  CLUSTER = L.markerClusterGroup({ chunkedLoading:true, spiderfyOnMaxZoom:true, maxClusterRadius:50 });
+  CLUSTER = L.markerClusterGroup({ chunkedLoading:true, spiderfyOnMaxZoom:true, maxClusterRadius:22, disableClusteringAtZoom:14, showCoverageOnHover:false });
   MAP.addLayer(CLUSTER);
   DEPOTLAYER = L.layerGroup().addTo(MAP); // 拠点は非クラスタで最前面に
   SEARCHLAYER = L.layerGroup().addTo(MAP); // 最寄り検索の地点・線
