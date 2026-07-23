@@ -37,6 +37,15 @@
   #pw-overlay button{ width:100%; border:none; border-radius:8px; padding:10px; font-size:14px; font-weight:700; background:#1d4ed8; color:#fff; cursor:pointer; }
   #loading{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:800; background:#fff; color:#0f172a; padding:14px 20px; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,.2); font-size:13px; }
   @media(max-width:640px){ #app{ flex-direction:column; } #sidebar{ width:100%; flex:0 0 auto; max-height:42%; } }
+  #unres-modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; display:none; align-items:center; justify-content:center; }
+  #unres-modal .card{ background:#fff; color:#0f172a; border-radius:12px; width:min(760px,92vw); max-height:82vh; display:flex; flex-direction:column; overflow:hidden; }
+  #unres-modal .hd{ display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid #e2e8f0; }
+  #unres-modal .hd b{ font-size:15px; }
+  #unres-modal .bd{ padding:14px 18px; overflow:auto; }
+  #unres-modal button{ border:none; border-radius:8px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; }
+  table.ul{ width:100%; border-collapse:collapse; font-size:12px; }
+  table.ul th{ text-align:left; background:#f1f5f9; padding:6px 8px; position:sticky; top:0; }
+  table.ul td{ border-top:1px solid #eef2f7; padding:5px 8px; vertical-align:top; }
 </style>
 </head>
 <body>
@@ -52,6 +61,19 @@
   </div>
 </div>
 
+<div id="unres-modal">
+  <div class="card">
+    <div class="hd">
+      <b>⚠️ 座標未解決リスト</b>
+      <div>
+        <button id="unres-copy" style="background:#e2e8f0;color:#0f172a;margin-right:6px;" onclick="copyUnresolved()">コピー</button>
+        <button id="unres-close" style="background:#1d4ed8;color:#fff;">閉じる</button>
+      </div>
+    </div>
+    <div class="bd" id="unres-body"></div>
+  </div>
+</div>
+
 <div id="app">
   <div id="sidebar">
     <h1>🗺️ 配送エリアマップ</h1>
@@ -63,6 +85,7 @@
       <input type="file" id="csvfile" accept=".csv,text/csv" style="font-size:12px;color:#cbd5e1;width:100%;">
       <button id="ingestBtn" style="margin-top:8px;width:100%;padding:9px;border:none;border-radius:8px;background:#059669;color:#fff;font-weight:700;cursor:pointer;">この内容で地図を更新</button>
       <div id="ingest-status" style="font-size:11px;color:#cbd5e1;margin-top:8px;line-height:1.6;"></div>
+      <button id="unresBtn" style="display:none;margin-top:8px;width:100%;padding:7px;border:1px solid #b45309;border-radius:8px;background:#78350f;color:#fde68a;font-size:12px;font-weight:700;cursor:pointer;">⚠️ 座標未解決リスト</button>
     </div>
 
     <div class="group">
@@ -348,24 +371,60 @@ function transformRows(rows){
     const depot=g(row,'depot'), pc=g(row,'pc'), plan=normPlan(g(row,'plan'));
     const days=DAYS.filter(d=>marked(g(row,d[1]))).map(d=>d[0]);
     let lat=toNum(g(row,'lat')), lng=toNum(g(row,'lng'));
-    if(lat==null||lng==null){ stats.dropped_noCoord++; continue; }
-    stats[cancel?'cancelled':'active']++;
     const key=company+'|'+g(row,'floor')+'|'+address;
     let L=byloc[key];
-    if(!L){ L={name:company,floor:g(row,'floor'),addr:address,pref:g(row,'pref'),lat:Math.round(lat*1e6)/1e6,lng:Math.round(lng*1e6)/1e6,cancelled:true,status:status,act_dep:new Set(),act_pc:new Set(),any_dep:new Set(),any_pc:new Set(),plans:new Set(),days:new Set(),count:0}; byloc[key]=L; }
+    if(!L){ L={name:company,floor:g(row,'floor'),addr:address,pref:g(row,'pref'),lat:null,lng:null,cancelled:true,status:status,act_dep:new Set(),act_pc:new Set(),any_dep:new Set(),any_pc:new Set(),plans:new Set(),days:new Set(),count:0}; byloc[key]=L; }
+    if(lat!=null&&lng!=null&&L.lat==null){ L.lat=Math.round(lat*1e6)/1e6; L.lng=Math.round(lng*1e6)/1e6; }
     if(depot)L.any_dep.add(depot); if(pc)L.any_pc.add(pc);
     if(!cancel){ L.cancelled=false; L.status=status; if(depot)L.act_dep.add(depot); if(pc)L.act_pc.add(pc); if(plan)L.plans.add(plan); days.forEach(d=>L.days.add(d)); const c=toNum(g(row,'count')); if(c!=null)L.count+=Math.round(c); }
   }
-  const active=[], cx=[];
+  const active=[], cx=[], pending=[];
   for(const k in byloc){ const L=byloc[k];
-    if(L.cancelled) cx.push({name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:'解約',status:'解約',depot:'',pc:'',plans:[],days:[],count:''});
-    else active.push({name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:classifySets(L.act_dep,L.act_pc),status:L.status,depot:[...L.act_dep].sort().join(' / '),pc:[...L.act_pc].sort().join(' / '),plans:[...L.plans].sort(),days:['月','火','水','木','金'].filter(d=>L.days.has(d)),count:L.count});
+    if(L.cancelled){ if(L.lat!=null) cx.push({name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:'解約',status:'解約',depot:'',pc:'',plans:[],days:[],count:''}); continue; }
+    const p={name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:classifySets(L.act_dep,L.act_pc),status:L.status,depot:[...L.act_dep].sort().join(' / '),pc:[...L.act_pc].sort().join(' / '),plans:[...L.plans].sort(),days:['月','火','水','木','金'].filter(d=>L.days.has(d)),count:L.count};
+    if(L.lat!=null) active.push(p); else pending.push(p);  // 稼働で座標なし → 後でGSI補完
   }
-  stats.locations=active.length+cx.length; stats.active_locations=active.length; stats.cancelled_locations=cx.length;
   const now=new Date(), p2=n=>String(n).padStart(2,'0');
   const gen=`${now.getFullYear()}/${p2(now.getMonth()+1)}/${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
-  return {generatedAt:gen, active, cx, stats};
+  return {generatedAt:gen, active, cx, pending, stats};
 }
+// 住所を綺麗にして座標を導く（ブラウザ内・国土地理院API・CMSには触れない）
+const GKEY='deliv_geocache';
+let gcache={}; try{ gcache=JSON.parse(localStorage.getItem(GKEY)||'{}'); }catch(e){}
+function normCandidates(addr){
+  let a=addr.normalize('NFKC').replace(/〒?\s*\d{3}[-−]?\d{4}\s*/,'').replace(/センターコード\s*【[^】]*】/,'').replace(/【[^】]*】/g,'').replace(/　/g,' ').trim();
+  const c=[a];
+  const m=a.match(/(京都市.*?区).*?(?:下ル|上ル|東入ル|西入ル|東入|西入|下る|上る)(.+)/);
+  if(m){ const town=m[2].replace(/\d.*$/,'').trim(); if(town) c.push('京都府'+m[1]+town); }
+  if(a.indexOf(' ')>=0) c.push(a.split(' ')[0]);
+  const t=a.replace(/([0-9０-９]+[-−ー－].*|[0-9０-９]+番.*|[0-9０-９]+$)/,'').trim();
+  if(t&&t!==a) c.push(t);
+  return [...new Set(c.filter(Boolean))];
+}
+async function gsiQuery(q){
+  try{ const r=await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q='+encodeURIComponent(q));
+    const a=await r.json();
+    if(a&&a[0]&&a[0].geometry&&a[0].geometry.coordinates){ const c=a[0].geometry.coordinates; return [Math.round(c[1]*1e6)/1e6,Math.round(c[0]*1e6)/1e6]; }
+  }catch(e){} return null;
+}
+async function geocodeOne(addr){
+  if(addr in gcache) return gcache[addr];
+  let res=null;
+  for(const q of normCandidates(addr)){ res=await gsiQuery(q); if(res) break; }
+  gcache[addr]=res; return res;
+}
+async function geocodePending(pending,onProg){
+  const resolved=[], unresolved=[];
+  for(let i=0;i<pending.length;i++){
+    const p=pending[i]; const gcd=await geocodeOne(p.addr);
+    if(gcd){ p.lat=gcd[0]; p.lng=gcd[1]; resolved.push(p); }
+    else unresolved.push({name:p.name,addr:p.addr,pref:p.pref});
+    if(onProg && i%10===0) onProg(i+1,pending.length);
+  }
+  try{ localStorage.setItem(GKEY, JSON.stringify(gcache)); }catch(e){}
+  return {resolved, unresolved};
+}
+
 async function ingest(){
   const f=document.getElementById('csvfile').files[0];
   if(!f){ ingStatus('<span style="color:#f87171">CSVファイルを選んでください</span>'); return; }
@@ -374,20 +433,51 @@ async function ingest(){
     ingStatus('① CSV読み込み中…'); const text=await decodeCsv(f);
     ingStatus('② 解析中…'); const parsed=Papa.parse(text,{skipEmptyLines:true});
     ingStatus('③ 変換中…'); const result=transformRows(parsed.data);
+    let unresolved=[];
+    if(result.pending.length){
+      const gc=await geocodePending(result.pending,(i,n)=>ingStatus(`③ 住所から座標を補完中… ${i}/${n}`));
+      result.active=result.active.concat(gc.resolved); unresolved=gc.unresolved;
+    }
     const gen=result.generatedAt;
     const post=(set,pts)=>fetch(BACKEND_URL,{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain'},
       body:JSON.stringify({pw:PW,set:set,json:JSON.stringify({generatedAt:gen,points:pts,stats:{locations:pts.length}})})}).then(r=>r.json());
-    ingStatus(`④ 送信中… 稼働${result.stats.active_locations.toLocaleString()}拠点`);
+    ingStatus(`④ 送信中… 稼働${result.active.length.toLocaleString()}拠点`);
     const d1=await post('main', result.active);
     if(!d1.ok){ ingStatus('<span style="color:#f87171">更新失敗(稼働): '+(d1.error||'')+'</span>'); return; }
-    ingStatus('④ 送信中… 解約データ…');
-    const d2=await post('cx', result.cx);
-    if(d2.ok){ cxLoaded=false; cxCache=[]; ingStatus(`✅ 更新完了：稼働${result.stats.active_locations.toLocaleString()} ／ 解約${result.stats.cancelled_locations.toLocaleString()}拠点（座標なし${result.stats.dropped_noCoord.toLocaleString()}件は未表示）`); await loadData(); }
-    else ingStatus('<span style="color:#f87171">更新失敗(解約): '+(d2.error||'')+'</span>');
+    await post('cx', result.cx);
+    await post('unresolved', unresolved);
+    cxLoaded=false; cxCache=[];
+    ingStatus(`✅ 更新完了：稼働${result.active.length.toLocaleString()} ／ 解約${result.cx.length.toLocaleString()} ／ 座標未解決${unresolved.length}件`);
+    await loadData(); await loadUnresolved();
   }catch(e){ ingStatus('<span style="color:#f87171">エラー: '+e.message+'</span>'); }
-  finally{ btn.disabled=false; }
+  finally{ document.getElementById('ingestBtn').disabled=false; }
 }
 document.getElementById('ingestBtn').onclick=ingest;
+
+// ===== 座標未解決リスト（閲覧）=====
+let UNRESOLVED=[];
+async function loadUnresolved(){
+  try{ const r=await fetch(BACKEND_URL+'?set=unresolved&t='+Date.now(),{redirect:'follow'}); const d=await r.json(); UNRESOLVED=d.points||[]; }
+  catch(e){ UNRESOLVED=[]; }
+  const b=document.getElementById('unresBtn');
+  if(b){ b.textContent=`⚠️ 座標未解決リスト（${UNRESOLVED.length}）`; b.style.display=UNRESOLVED.length?'block':'none'; }
+}
+function showUnresolved(){
+  const ov=document.getElementById('unres-modal');
+  const rows=UNRESOLVED.map((p,i)=>`<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(p.pref||'')}</td><td>${esc(p.addr)}</td></tr>`).join('');
+  document.getElementById('unres-body').innerHTML=
+    `<div style="margin-bottom:8px;font-size:12px;color:#475569">座標が取得できず地図に出せていない稼働拠点です（住所表記の見直しやCMSでの修正で解決できます）。</div>`+
+    `<table class="ul"><thead><tr><th>#</th><th>企業名</th><th>都道府県</th><th>住所</th></tr></thead><tbody>${rows||'<tr><td colspan=4>なし</td></tr>'}</tbody></table>`;
+  ov.style.display='flex';
+}
+function copyUnresolved(){
+  const t=UNRESOLVED.map(p=>[p.name,p.pref||'',p.addr].join('\t')).join('\n');
+  navigator.clipboard.writeText(t).then(()=>{ document.getElementById('unres-copy').textContent='✓ コピーしました'; });
+}
+window.showUnresolved=showUnresolved; window.copyUnresolved=copyUnresolved;
+document.getElementById('unresBtn').onclick=showUnresolved;
+document.getElementById('unres-close').onclick=()=>{ document.getElementById('unres-modal').style.display='none'; };
+loadUnresolved();
 
 document.getElementById('foot').innerHTML =
   'ピンをクリックで詳細。上部フィルタで区分・プラン・曜日・都道府県・キーワードを絞り込み。<br>「解約」はグレーピン（初期OFF）。データは社外秘。';
