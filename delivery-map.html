@@ -41,6 +41,8 @@
   details.sec>summary::-webkit-details-marker{ display:none; }
   details.sec>summary::before{ content:"▸"; color:#64748b; margin-right:7px; display:inline-block; }
   details.sec[open]>summary::before{ content:"▾"; }
+  /* 地図タイルを淡く＝地名などを目立たせず、色付きピンを際立たせる */
+  .leaflet-tile-pane{ filter:grayscale(0.4) brightness(1.06) opacity(0.88); }
   @media(max-width:640px){ #app{ flex-direction:column; } #sidebar{ width:100%; flex:0 0 auto; max-height:42%; } }
   #unres-modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; display:none; align-items:center; justify-content:center; }
   #unres-modal .card{ background:#fff; color:#0f172a; border-radius:12px; width:min(760px,92vw); max-height:82vh; display:flex; flex-direction:column; overflow:hidden; }
@@ -365,7 +367,7 @@ async function apply(){
   const shown = ALL.filter(match);
   CLUSTER.clearLayers();
   const markers = shown.map(p=>{
-    const m=L.circleMarker([p.lat,p.lng],{radius:6,weight:1,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.9});
+    const m=L.circleMarker([p.lat,p.lng],{radius:9,weight:2,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.95});
     m.bindPopup(popupHtml(p),{maxWidth:320});
     return m;
   });
@@ -509,7 +511,7 @@ function transformRows(rows){
     const depot=g(row,'depot'), pc=g(row,'pc'), plan=normPlan(g(row,'plan'));
     const days=DAYS.filter(d=>marked(g(row,d[1]))).map(d=>d[0]);
     let lat=toNum(g(row,'lat')), lng=toNum(g(row,'lng'));
-    const key=company+'|'+g(row,'floor')+'|'+address;
+    const key=company+'|'+g(row,'floor')+'|'+address+'|'+plan;  // プランごとに別ピン
     let L=byloc[key];
     if(!L){ L={name:company,floor:g(row,'floor'),addr:address,pref:g(row,'pref'),lat:null,lng:null,cancelled:true,status:status,act_dep:new Set(),act_pc:new Set(),any_dep:new Set(),any_pc:new Set(),plans:new Set(),days:new Set(),count:0}; byloc[key]=L; }
     if(lat!=null&&lng!=null&&L.lat==null){ L.lat=Math.round(lat*1e6)/1e6; L.lng=Math.round(lng*1e6)/1e6; }
@@ -658,7 +660,7 @@ async function findNearest(){
   top.forEach((s,i)=>{
     const p=s.p, c=KUBUN_COLORS[p.kubun]||'#f59e0b';
     L.polyline([g,[p.lat,p.lng]],{color:'#0d9488',weight:2,dashArray:'5,6',opacity:.7}).addTo(SEARCHLAYER);
-    const ic=L.divIcon({className:'',html:`<div style="width:24px;height:24px;border-radius:50%;background:${c};border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px;">${i+1}</div>`,iconSize:[24,24],iconAnchor:[12,12],popupAnchor:[0,-12]});
+    const ic=L.divIcon({className:'',html:`<div style="width:36px;height:36px;border-radius:50%;background:${c};border:4px solid #fff;box-shadow:0 2px 7px rgba(0,0,0,.55),0 0 0 3px rgba(13,148,136,.6);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:18px;">${i+1}</div>`,iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-18]});
     NEAR_MARKERS[i]=L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:2500}).bindPopup(nearPopup(p,s.d,i+1)).addTo(SEARCHLAYER);
     bounds.push([p.lat,p.lng]);
   });
