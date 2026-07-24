@@ -194,6 +194,9 @@ let cxLoaded=false, cxLoading=false, cxCache=[];      // 解約は遅延読込
 let DEPOTLAYER=null, DEPOTS=null, depotLoading=false; // デポ/PC等の拠点レイヤ
 let SEARCHLAYER=null; // 最寄り検索の地点・線
 let NEAR_MARKERS=[];  // 最寄り上位のマーカー（カードクリックで移動）
+let _lastBand=null;
+function zoomBand(){ const z=MAP?MAP.getZoom():5; return z<=11?'s':(z<=14?'m':'l'); }
+function radiusForZoom(){ const z=MAP?MAP.getZoom():5; return z<=11?4 : (z<=13?6 : (z<=15?8 : 10)); }
 function focusNear(i){ const m=NEAR_MARKERS[i]; if(!m) return; MAP.setView(m.getLatLng(),16,{animate:true}); m.openPopup(); }
 window.focusNear=focusNear;
 const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', pcFilter:'' };
@@ -236,8 +239,10 @@ function initMap(){
   L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{
     maxZoom:18, attribution:'地理院タイル'
   }).addTo(MAP);
-  CLUSTER = L.markerClusterGroup({ chunkedLoading:true, spiderfyOnMaxZoom:true, maxClusterRadius:22, disableClusteringAtZoom:14, showCoverageOnHover:false });
+  CLUSTER = L.markerClusterGroup({ chunkedLoading:true, spiderfyOnMaxZoom:true, maxClusterRadius:20, disableClusteringAtZoom:12, showCoverageOnHover:false });
   MAP.addLayer(CLUSTER);
+  // ズーム帯が変わったらピンの大きさを再調整（引くと小さく＝細かく、寄ると大きく）
+  MAP.on('zoomend', ()=>{ const b=zoomBand(); if(b!==_lastBand){ _lastBand=b; if(ALL.length) apply(); } });
   DEPOTLAYER = L.layerGroup().addTo(MAP); // 拠点は非クラスタで最前面に
   SEARCHLAYER = L.layerGroup().addTo(MAP); // 最寄り検索の地点・線
 }
@@ -367,7 +372,7 @@ async function apply(){
   const shown = ALL.filter(match);
   CLUSTER.clearLayers();
   const markers = shown.map(p=>{
-    const m=L.circleMarker([p.lat,p.lng],{radius:9,weight:2,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.95});
+    const m=L.circleMarker([p.lat,p.lng],{radius:radiusForZoom(),weight:1.5,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.95});
     m.bindPopup(popupHtml(p),{maxWidth:320});
     return m;
   });
