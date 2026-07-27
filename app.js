@@ -14,7 +14,8 @@ const KUBUN_COLORS = {
 const DAYS = ['月','火','水','木','金'];
 
 // ===== パスワードゲート =====
-(function(){ if(localStorage.getItem('deliv_map_pw')===PW) unlock(); })();
+// 自動解錠はスクリプト全体の初期化完了後に実行（MAP等の変数初期化前に走ると地図初期化が失敗するため）
+setTimeout(function(){ if(localStorage.getItem('deliv_map_pw')===PW) unlock(); }, 0);
 function checkPw(){
   const v=document.getElementById('pw-input').value;
   if(v===PW){ localStorage.setItem('deliv_map_pw',PW); unlock(); }
