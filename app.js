@@ -113,14 +113,34 @@ function loadScript(src){
     document.head.appendChild(s);
   });
 }
-async function fetchData(name){
+function setLoad(t){ const el=document.getElementById('loading'); if(el) el.innerHTML=t; }
+function b64ToJson(b64){ const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0)); return decryptEnc(bytes.buffer); }
+function decodeWrapped(txt){ return b64ToJson(txt.replace(/^[\s\S]*?="/,'').replace(/";?\s*$/,'')); }
+// 方式1: fetch（受信量を表示・進捗が見える）
+async function fetchViaFetch(name){
+  const res=await fetch('./data/'+name+'.js?t='+Date.now(),{cache:'no-store'});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const total=+(res.headers.get('content-length')||0);
+  let txt;
+  if(res.body && res.body.getReader){
+    const reader=res.body.getReader(); let received=0; const chunks=[];
+    for(;;){ const r=await reader.read(); if(r.done) break; chunks.push(r.value); received+=r.value.length;
+      if(name==='active') setLoad('データ受信中… '+(received/1048576).toFixed(1)+'MB'+(total?(' / '+(total/1048576).toFixed(1)+'MB'):'')); }
+    const dec=new TextDecoder(); txt=''; for(const c of chunks) txt+=dec.decode(c,{stream:true}); txt+=dec.decode();
+  } else { txt=await res.text(); }
+  setLoad('復号中…');
+  return decodeWrapped(txt);
+}
+// 方式2: <script>タグ（fetchが塞がれている環境向けフォールバック）
+async function fetchViaScript(name){
   await loadScript('./data/'+name+'.js?t='+Date.now());
-  const b64=window['__D_'+name];
-  if(!b64) throw new Error('データが空です');
-  const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
-  const d=await decryptEnc(bytes.buffer);
+  const b64=window['__D_'+name]; if(!b64) throw new Error('empty');
   try{ delete window['__D_'+name]; }catch(e){}
-  return d;
+  setLoad('復号中…'); return b64ToJson(b64);
+}
+async function fetchData(name){
+  try{ return await fetchViaFetch(name); }
+  catch(e){ setLoad('別方式で再取得中…（'+e.message+'）'); return await fetchViaScript(name); }
 }
 // 短縮キー(容量削減) → 通常キーへ展開
 function expandPt(o){
@@ -129,9 +149,8 @@ function expandPt(o){
 }
 
 async function loadData(){
-  const box=document.getElementById('loading');
-  const t0=Date.now(); let timer=null;
-  if(box){ box.innerHTML='データ取得中… 0秒'; timer=setInterval(()=>{ const el=document.getElementById('loading'); if(el) el.innerHTML='データ取得中… '+Math.round((Date.now()-t0)/1000)+'秒<br><span style="font-size:11px;color:#94a3b8">初回は数秒かかります</span>'; },1000); }
+  let timer=null;
+  setLoad('接続中…');
   try{
     const d=await fetchData('active');
     cxLoaded=false; cxCache=[]; // 解約は再取得
