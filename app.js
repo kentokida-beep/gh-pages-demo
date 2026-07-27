@@ -385,6 +385,7 @@ function transformRows(rows){
   for(const k in byloc){ const L=byloc[k];
     if(L.cancelled){ if(L.lat!=null) cx.push({name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:'解約',status:'解約',depot:'',pc:'',plans:[],days:[],count:''}); continue; }
     const p={name:L.name,floor:L.floor,addr:L.addr,pref:L.pref,lat:L.lat,lng:L.lng,kubun:classifySets(L.act_dep,L.act_pc),status:L.status,depot:[...L.act_dep].sort().join(' / '),pc:[...L.act_pc].sort().join(' / '),plans:[...L.plans].sort(),days:['月','火','水','木','金'].filter(d=>L.days.has(d)),count:L.count};
+    if(L.plans.has('ごはん')) p.kubun='宅急便(冷凍)';  // ごはんは冷凍=宅急便のみ（デリバリー不可）
     if(L.lat!=null) active.push(p); else pending.push(p);  // 稼働で座標なし → 後でGSI補完
   }
   const now=new Date(), p2=n=>String(n).padStart(2,'0');
