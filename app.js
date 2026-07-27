@@ -498,12 +498,12 @@ function distKm(a,b){
   const s=Math.sin(dLat/2)**2 + Math.cos(toR(a[0]))*Math.cos(toR(b[0]))*Math.sin(dLng/2)**2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(s)));
 }
-function nearPopup(p,d,rank){
+function nearPopup(p,d){
   const days=(p.days||[]).length ? (p.days.join('・')+'曜') : '曜日指定なし';
   const detail=[p.depot,p.pc].filter(Boolean).join(' ／ ');
   const row=(k,v)=> v?`<tr><td class="k">${k}</td><td>${esc(v)}</td></tr>`:'';
-  return `<div class="lp"><b>${rank}. ${esc(p.name)}</b> <span style="color:#64748b">${esc(p.floor||'')}</span>
-    <table>${row('距離','直線 '+d.toFixed(d<10?1:0)+' km')}${row('配送区分',p.kubun)}${row('配達曜日',days)}${row('デポ/PC',detail)}</table></div>`;
+  return `<div class="lp"><b>${esc(p.name)}</b> <span style="color:#64748b">${esc(p.floor||'')}</span>
+    <table>${row('検索地点からの距離','<b>直線 '+d.toFixed(d<10?1:0)+' km</b>')}${row('配送区分',p.kubun)}${row('プラン',(p.plans||[]).join('・'))}${row('配達曜日',days)}${row('デポ/PC',detail)}</table></div>`;
 }
 async function findNearest(){
   const q=document.getElementById('nearAddr').value.trim();
@@ -515,7 +515,7 @@ async function findNearest(){
   const cands=ALL.filter(p=>p.kubun!=='解約');
   if(!cands.length){ box.innerHTML='データがまだ読み込まれていません。'; return; }
   const top=cands.map(p=>({p,d:distKm(g,[p.lat,p.lng])})).sort((a,b)=>a.d-b.d).slice(0,3);
-  // 地図に検索地点＋最寄り上位を①②③で表示、各社への線も
+  // 地図に検索地点＋最寄り企業を表示（番号なし・タップで距離入りポップアップ）
   SEARCHLAYER.clearLayers();
   const here=L.marker(g,{icon:L.divIcon({className:'',html:'<div style="font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">📍</div>',iconSize:[28,28],iconAnchor:[14,28],popupAnchor:[0,-26]}),zIndexOffset:3000}).bindPopup('<b>検索地点</b><br>'+esc(q));
   here.addTo(SEARCHLAYER);
@@ -523,22 +523,21 @@ async function findNearest(){
   const bounds=[g];
   top.forEach((s,i)=>{
     const p=s.p, c=KUBUN_COLORS[p.kubun]||'#f59e0b';
-    L.polyline([g,[p.lat,p.lng]],{color:'#0d9488',weight:2,dashArray:'5,6',opacity:.7}).addTo(SEARCHLAYER);
-    const ic=L.divIcon({className:'',html:`<div style="width:36px;height:36px;border-radius:50%;background:${c};border:4px solid #fff;box-shadow:0 2px 7px rgba(0,0,0,.55),0 0 0 3px rgba(13,148,136,.6);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:18px;">${i+1}</div>`,iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-18]});
-    NEAR_MARKERS[i]=L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:2500}).bindPopup(nearPopup(p,s.d,i+1)).addTo(SEARCHLAYER);
+    L.polyline([g,[p.lat,p.lng]],{color:'#0d9488',weight:2,dashArray:'5,6',opacity:.6}).addTo(SEARCHLAYER);
+    const ic=L.divIcon({className:'',html:`<div style="width:22px;height:22px;border-radius:50%;background:${c};border:3px solid #fff;box-shadow:0 0 0 3px rgba(13,148,136,.75),0 1px 5px rgba(0,0,0,.45);"></div>`,iconSize:[22,22],iconAnchor:[11,11],popupAnchor:[0,-11]});
+    NEAR_MARKERS[i]=L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:2500}).bindPopup(nearPopup(p,s.d)).addTo(SEARCHLAYER);
     bounds.push([p.lat,p.lng]);
   });
   MAP.fitBounds(bounds,{padding:[70,70],maxZoom:15});
-  here.openPopup();
-  // 結果カード（最寄り3件）
-  const rank=['🥇','🥈','🥉'];
+  if(NEAR_MARKERS[0]) NEAR_MARKERS[0].openPopup(); // 最寄り1社の距離ポップアップを自動表示
+  // 結果カード（近い順・番号なし）
   box.innerHTML=top.map((s,i)=>{
     const p=s.p, c=KUBUN_COLORS[p.kubun]||'#f59e0b';
     const days=(p.days||[]).length ? (p.days.join('・')+'曜') : '曜日指定なし';
     const detail=[p.depot,p.pc].filter(Boolean).join(' ／ ');
-    return `<div onclick="focusNear(${i})" title="クリックで地図をここへ移動" style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;">
-      <div style="font-weight:700;">${rank[i]} ${esc(p.name)} <span style="color:#94a3b8;font-weight:400;">${esc(p.floor||'')}</span></div>
-      <div style="color:#e2e8f0;margin-top:2px;">直線距離 <b>${s.d.toFixed(s.d<10?1:0)} km</b></div>
+    return `<div onclick="focusNear(${i})" title="クリックで地図で表示" style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;">
+      <div style="font-weight:700;">${esc(p.name)} <span style="color:#94a3b8;font-weight:400;">${esc(p.floor||'')}</span></div>
+      <div style="color:#e2e8f0;margin-top:2px;">検索地点から <b>直線 ${s.d.toFixed(s.d<10?1:0)} km</b></div>
       <div style="margin-top:3px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px;vertical-align:-1px;"></span>${esc(p.kubun)} ／ ${days}</div>
       ${detail?`<div style="color:#94a3b8;margin-top:2px;">${esc(detail)}</div>`:''}
       <div style="text-align:right;color:#5eead4;font-size:11px;margin-top:3px;">地図で表示 ›</div>
