@@ -286,6 +286,11 @@ async function fetchData(name){
   try{ delete window['__D_'+name]; }catch(e){}
   return d;
 }
+// 短縮キー(容量削減) → 通常キーへ展開
+function expandPt(o){
+  return {name:o.n,floor:o.f,addr:o.a,pref:o.r,lat:o.y,lng:o.x,kubun:o.k,status:o.s,
+          depot:o.d,pc:o.p,plans:o.pl||[],days:o.dy||[],count:o.c};
+}
 
 async function loadData(){
   const box=document.getElementById('loading');
@@ -294,7 +299,7 @@ async function loadData(){
   try{
     const d=await fetchData('active');
     cxLoaded=false; cxCache=[]; // 解約は再取得
-    ALL=(d.points||[]).filter(p=>typeof p.lat==='number' && typeof p.lng==='number');
+    ALL=(d.points||[]).map(expandPt).filter(p=>typeof p.lat==='number' && typeof p.lng==='number');
     document.getElementById('meta').textContent=
       `データ生成: ${d.generatedAt||'-'} ／ 稼働 ${ (d.stats&&d.stats.active_locations)||ALL.length } 拠点`;
     buildFilters();
@@ -384,7 +389,7 @@ async function loadCx(){
   const cnt=document.getElementById('count'); if(cnt) cnt.textContent='解約データ取得中…';
   try{
     const d=await fetchData('cx');
-    cxCache=(d.points||[]).filter(p=>typeof p.lat==='number'&&typeof p.lng==='number');
+    cxCache=(d.points||[]).map(expandPt).filter(p=>typeof p.lat==='number'&&typeof p.lng==='number');
     ALL=ALL.concat(cxCache); cxLoaded=true;
   }catch(e){}
   cxLoading=false;
