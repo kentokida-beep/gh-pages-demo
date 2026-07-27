@@ -147,7 +147,7 @@ async function fetchData(name){
 // 短縮キー(容量削減) → 通常キーへ展開
 function expandPt(o){
   return {name:o.n,floor:o.f,addr:o.a,pref:o.r,lat:o.y,lng:o.x,kubun:o.k,status:o.s,
-          depot:o.d,pc:o.p,plans:o.pl||[],days:o.dy||[],count:o.c};
+          depot:o.d,pc:o.p,plans:o.pl||[],days:o.dy||[],count:o.c,cid:o.i||'',contract:o.ct||''};
 }
 
 async function loadData(){
@@ -225,7 +225,18 @@ function match(p){
   return true;
 }
 
+function updateDeliveryChip(){
+  const box=document.getElementById('f-kubun'); if(!box) return;
+  const onlyGohan = state.plan.has('ごはん') && !state.plan.has('やさい');
+  box.querySelectorAll('.chip').forEach(el=>{
+    if(el.textContent.indexOf('デリバリー')>=0){
+      if(onlyGohan){ el.style.opacity='0.35'; el.style.pointerEvents='none'; el.classList.remove('on'); state.kubun.delete('デリバリー'); el.title='ごはんプランはデリバリー不可'; }
+      else { el.style.opacity=''; el.style.pointerEvents=''; el.title=''; }
+    }
+  });
+}
 async function apply(){
+  updateDeliveryChip();
   if(state.kubun.has('解約') && !cxLoaded){ await loadCx(); }
   const shown = ALL.filter(match);
   const r=radiusForZoom();
@@ -327,6 +338,8 @@ function popupHtml(p){
   return `<div class="lp"><b>${esc(p.name||'(名称なし)')}</b>${p.floor?' <span style="color:#64748b">'+esc(p.floor)+'</span>':''}
     <table>
       ${distRow}
+      ${row('CID',p.cid)}
+      ${row('契約ステータス',p.contract)}
       ${row('住所',p.addr)}
       ${row('配送区分',p.kubun)}
       ${row('デポ/委託先',p.depot)}
@@ -334,7 +347,7 @@ function popupHtml(p){
       ${row('プラン',(p.plans||[]).join('・'))}
       ${row('配達曜日',(p.days||[]).join('・'))}
       ${row('個数',p.count)}
-      ${row('ステータス',p.status)}
+      ${row('稼働ステータス',p.status)}
     </table></div>`;
 }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -507,7 +520,7 @@ function nearPopup(p,d){
   const detail=[p.depot,p.pc].filter(Boolean).join(' ／ ');
   const row=(k,v)=> v?`<tr><td class="k">${k}</td><td>${esc(v)}</td></tr>`:'';
   return `<div class="lp"><b>${esc(p.name)}</b> <span style="color:#64748b">${esc(p.floor||'')}</span>
-    <table>${row('検索地点からの距離','<b>直線 '+d.toFixed(d<10?1:0)+' km</b>')}${row('配送区分',p.kubun)}${row('プラン',(p.plans||[]).join('・'))}${row('配達曜日',days)}${row('デポ/PC',detail)}</table></div>`;
+    <table>${row('検索地点からの距離','<b>直線 '+d.toFixed(d<10?1:0)+' km</b>')}${row('CID',p.cid)}${row('契約ステータス',p.contract)}${row('配送区分',p.kubun)}${row('プラン',(p.plans||[]).join('・'))}${row('配達曜日',days)}${row('デポ/PC',detail)}</table></div>`;
 }
 async function findNearest(){
   const q=document.getElementById('nearAddr').value.trim();

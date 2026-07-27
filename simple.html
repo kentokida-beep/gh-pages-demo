@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>配送エリアマップ（簡易版）</title>
+<link rel="stylesheet" href="./lib/leaflet.css">
+<style>
+  :root{ color-scheme:light dark; }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ height:100%; font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif; }
+  #app{ display:flex; height:100%; }
+  #sidebar{ width:300px; flex:0 0 300px; background:#0f172a; color:#e2e8f0; padding:16px; overflow-y:auto; }
+  #map{ flex:1; }
+  h1{ font-size:16px; font-weight:800; margin-bottom:4px; }
+  .sub{ font-size:11px; color:#94a3b8; margin-bottom:14px; line-height:1.5; }
+  .group{ margin-bottom:16px; }
+  .group h2{ font-size:12px; font-weight:700; color:#cbd5e1; margin-bottom:8px; letter-spacing:.03em; }
+  .chips{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip{ display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:5px 9px; border-radius:999px;
+         background:#1e293b; border:1px solid #334155; cursor:pointer; user-select:none; }
+  .chip.on{ background:#1d4ed8; border-color:#3b82f6; color:#fff; }
+  .chip .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+  select,input[type=text]{ width:100%; padding:8px; border-radius:8px; border:1px solid #334155; background:#1e293b; color:#e2e8f0; font-size:13px; }
+  .count{ font-size:12px; color:#94a3b8; margin-top:6px; }
+  .foot{ font-size:10px; color:#64748b; margin-top:18px; line-height:1.6; border-top:1px solid #1e293b; padding-top:10px; }
+  .marker-dot{ border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.4); }
+  .lp b{ font-size:14px; }
+  .lp table{ margin-top:6px; font-size:12px; border-collapse:collapse; }
+  .lp td{ padding:2px 6px 2px 0; vertical-align:top; }
+  .lp td.k{ color:#64748b; white-space:nowrap; }
+  #pw-overlay{ position:fixed; inset:0; background:#0f172a; z-index:9999; display:flex; align-items:center; justify-content:center; }
+  #pw-overlay .box{ background:#fff; color:#0f172a; border-radius:16px; padding:36px; text-align:center; width:320px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  #pw-overlay input{ width:100%; padding:10px 14px; border:2px solid #e2e8f0; border-radius:8px; font-size:16px; text-align:center; outline:none; margin-bottom:12px; color:#0f172a; background:#fff; }
+  #pw-overlay button{ width:100%; border:none; border-radius:8px; padding:10px; font-size:14px; font-weight:700; background:#1d4ed8; color:#fff; cursor:pointer; }
+  #loading{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:800; background:#fff; color:#0f172a; padding:14px 20px; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,.2); font-size:13px; }
+  details.sec{ border-top:1px solid #1e293b; margin-top:14px; }
+  details.sec>summary{ cursor:pointer; list-style:none; padding:12px 0 4px; font-weight:700; font-size:13px; color:#cbd5e1; user-select:none; }
+  details.sec>summary::-webkit-details-marker{ display:none; }
+  details.sec>summary::before{ content:"▸"; color:#64748b; margin-right:7px; display:inline-block; }
+  details.sec[open]>summary::before{ content:"▾"; }
+  /* 地図タイルを淡く＝地名などを目立たせず、色付きピンを際立たせる */
+  .leaflet-tile-pane{ filter:grayscale(1) brightness(1.16) contrast(0.82) opacity(0.68); } /* 色を抜き、記号・地名を極力薄く（無地寄り） */
+  #admin-sec{ display:none; }
+  details.sec{ display:none !important; } /* 簡易版：詳細フィルタ類は非表示 */ /* CSV更新は管理者がコマンドで実施（アプリ内アップロードは非表示） */
+  @media(max-width:640px){ #app{ flex-direction:column; } #sidebar{ width:100%; flex:0 0 auto; max-height:42%; } }
+  #unres-modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; display:none; align-items:center; justify-content:center; }
+  #unres-modal .card{ background:#fff; color:#0f172a; border-radius:12px; width:min(760px,92vw); max-height:82vh; display:flex; flex-direction:column; overflow:hidden; }
+  #unres-modal .hd{ display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid #e2e8f0; }
+  #unres-modal .hd b{ font-size:15px; }
+  #unres-modal .bd{ padding:14px 18px; overflow:auto; }
+  #unres-modal button{ border:none; border-radius:8px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; }
+  table.ul{ width:100%; border-collapse:collapse; font-size:12px; }
+  table.ul th{ text-align:left; background:#f1f5f9; padding:6px 8px; position:sticky; top:0; }
+  table.ul td{ border-top:1px solid #eef2f7; padding:5px 8px; vertical-align:top; }
+</style>
+</head>
+<body>
+
+<div id="pw-overlay">
+  <div class="box">
+    <div style="font-size:28px;margin-bottom:8px;">🗺️</div>
+    <div style="font-size:18px;font-weight:800;margin-bottom:4px;">配送エリアマップ</div>
+    <div style="font-size:12px;color:#718096;margin-bottom:20px;">パスワードを入力してください</div>
+    <input type="password" id="pw-input" placeholder="パスワード" onkeypress="if(event.key==='Enter')checkPw()">
+    <button onclick="checkPw()">ログイン</button>
+    <div id="pw-err" style="color:#dc2626;font-size:12px;margin-top:8px;display:none;">パスワードが正しくありません</div>
+  </div>
+</div>
+
+<div id="unres-modal">
+  <div class="card">
+    <div class="hd">
+      <b>⚠️ 座標未解決リスト</b>
+      <div>
+        <button id="unres-fill" style="background:#78350f;color:#fde68a;margin-right:6px;" onclick="fillUnresolvedViaGsi()">GSIで座標を補完して反映</button>
+        <button id="unres-copy" style="background:#e2e8f0;color:#0f172a;margin-right:6px;" onclick="copyUnresolved()">コピー</button>
+        <button id="unres-close" style="background:#1d4ed8;color:#fff;">閉じる</button>
+      </div>
+    </div>
+    <div class="bd" id="unres-body"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div id="sidebar">
+    <h1>🗺️ 配送エリアマップ<span style="font-size:12px;color:#94a3b8;">（簡易版）</span></h1>
+    <div class="sub" id="meta">読み込み中…</div>
+
+    <details class="sec" id="admin-sec"><summary>⚙️ CMSデータで更新（管理者）</summary>
+    <div class="group" id="update-box" style="background:#111c33;border:1px solid #1e3a5f;border-radius:10px;padding:12px;margin-top:10px;">
+      <h2 style="display:none;">CMSデータで更新</h2>
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;line-height:1.5;">CMSからDLしたCSVを選び「地図を更新」を押すと、全員の地図に反映されます。</div>
+      <input type="file" id="csvfile" accept=".csv,text/csv" style="font-size:12px;color:#cbd5e1;width:100%;">
+      <button id="ingestBtn" style="margin-top:8px;width:100%;padding:9px;border:none;border-radius:8px;background:#059669;color:#fff;font-weight:700;cursor:pointer;">この内容で地図を更新</button>
+      <div id="ingest-status" style="font-size:11px;color:#cbd5e1;margin-top:8px;line-height:1.6;"></div>
+      <button id="unresBtn" style="display:none;margin-top:8px;width:100%;padding:7px;border:1px solid #b45309;border-radius:8px;background:#78350f;color:#fde68a;font-size:12px;font-weight:700;cursor:pointer;">⚠️ 座標未解決リスト</button>
+    </div>
+    </details>
+
+    <div class="group">
+      <h2>キーワード（企業名・住所）</h2>
+      <input type="text" id="kw" placeholder="例：渋谷 / 医療法人…">
+    </div>
+
+    <div class="group" style="background:#111c33;border:1px solid #1e3a5f;border-radius:10px;padding:12px;">
+      <h2>📍 住所から最寄り契約企業</h2>
+      <div style="font-size:11px;color:#94a3b8;margin:2px 0 8px;line-height:1.5;">住所を入れると、最寄りの契約企業・直線距離・配達曜日・配送方法を表示します。</div>
+      <input type="text" id="nearAddr" placeholder="例：渋谷区道玄坂1-2-3" onkeypress="if(event.key==='Enter')findNearest()">
+      <button id="nearBtn" style="margin-top:8px;width:100%;padding:8px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-weight:700;cursor:pointer;">最寄りを検索</button>
+      <div id="near-result" style="margin-top:10px;font-size:12px;"></div>
+    </div>
+
+    <details class="sec"><summary>🔍 絞り込み・色分け（詳細）</summary>
+    <div class="group" style="margin-top:10px;">
+      <h2>ピンの色分け</h2>
+      <div class="chips" id="f-colormode"></div>
+      <div id="color-legend" style="display:none;max-height:220px;overflow:auto;margin-top:8px;font-size:11px;"></div>
+    </div>
+
+    <div class="group">
+      <h2>担当デポ / SDS で絞り込み</h2>
+      <select id="f-depotfilter"><option value="">すべて表示</option></select>
+    </div>
+
+    <div class="group">
+      <h2>発送元PC で絞り込み</h2>
+      <select id="f-pcfilter"><option value="">すべて表示</option></select>
+    </div>
+
+    <div class="group">
+      <h2>配送区分</h2>
+      <div class="chips" id="f-kubun"></div>
+    </div>
+
+    <div class="group">
+      <h2>プラン</h2>
+      <div class="chips" id="f-plan"></div>
+    </div>
+
+    <div class="group">
+      <h2>配達曜日（デリバリー）</h2>
+      <div class="chips" id="f-day"></div>
+    </div>
+
+    <div class="group">
+      <h2>都道府県</h2>
+      <select id="f-pref"><option value="">すべて</option></select>
+    </div>
+
+    <div class="group">
+      <h2>拠点レイヤ（デポ・PC等）</h2>
+      <div class="chips" id="f-depot"></div>
+      <div style="font-size:10px;color:#64748b;margin-top:6px;">クリックで拠点の位置を重ねて表示</div>
+    </div>
+    </details>
+
+    <div class="count" id="count"></div>
+    <div class="foot" id="foot"></div>
+  </div>
+  <div id="map"><div id="loading">データ取得中…</div></div>
+</div>
+
+<script src="./lib/leaflet.js"></script>
+<script src="./lib/papaparse.min.js"></script>
+<script>(function(){var s=document.createElement("script");s.src="./app.js?t="+Date.now();s.onerror=function(){var l=document.getElementById("loading");if(l)l.textContent="プログラム読込失敗（再読み込みしてください）";};document.body.appendChild(s);})();</script>
+</body>
+</html>

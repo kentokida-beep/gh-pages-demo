@@ -40,7 +40,8 @@
   details.sec>summary::before{ content:"▸"; color:#64748b; margin-right:7px; display:inline-block; }
   details.sec[open]>summary::before{ content:"▾"; }
   /* 地図タイルを淡く＝地名などを目立たせず、色付きピンを際立たせる */
-  .leaflet-tile-pane{ filter:grayscale(0.7) brightness(1.13) contrast(0.9) opacity(0.9); }
+  .leaflet-tile-pane{ filter:grayscale(1) brightness(1.16) contrast(0.82) opacity(0.68); } /* 色を抜き、記号・地名を極力薄く（無地寄り） */
+  #admin-sec{ display:none; } /* CSV更新は管理者がコマンドで実施（アプリ内アップロードは非表示） */
   @media(max-width:640px){ #app{ flex-direction:column; } #sidebar{ width:100%; flex:0 0 auto; max-height:42%; } }
   #unres-modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; display:none; align-items:center; justify-content:center; }
   #unres-modal .card{ background:#fff; color:#0f172a; border-radius:12px; width:min(760px,92vw); max-height:82vh; display:flex; flex-direction:column; overflow:hidden; }
@@ -85,7 +86,7 @@
     <h1>🗺️ 配送エリアマップ</h1>
     <div class="sub" id="meta">読み込み中…</div>
 
-    <details class="sec"><summary>⚙️ CMSデータで更新（管理者）</summary>
+    <details class="sec" id="admin-sec"><summary>⚙️ CMSデータで更新（管理者）</summary>
     <div class="group" id="update-box" style="background:#111c33;border:1px solid #1e3a5f;border-radius:10px;padding:12px;margin-top:10px;">
       <h2 style="display:none;">CMSデータで更新</h2>
       <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;line-height:1.5;">CMSからDLしたCSVを選び「地図を更新」を押すと、全員の地図に反映されます。</div>
