@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>配送エリアマップ（新）</title>
 <link rel="stylesheet" href="./lib/leaflet.css">
-<link rel="stylesheet" href="./lib/MarkerCluster.css">
-<link rel="stylesheet" href="./lib/MarkerCluster.Default.css">
 <style>
   :root{ color-scheme:light dark; }
   *{ margin:0; padding:0; box-sizing:border-box; }
@@ -162,7 +160,6 @@
 </div>
 
 <script src="./lib/leaflet.js"></script>
-<script src="./lib/markercluster.js"></script>
 <script src="./lib/papaparse.min.js"></script>
 <script>
 // ===== 設定 =====
@@ -239,8 +236,7 @@ function initMap(){
   L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{
     maxZoom:18, attribution:'地理院タイル'
   }).addTo(MAP);
-  CLUSTER = L.markerClusterGroup({ chunkedLoading:true, spiderfyOnMaxZoom:true, maxClusterRadius:20, disableClusteringAtZoom:12, showCoverageOnHover:false });
-  MAP.addLayer(CLUSTER);
+  CLUSTER = L.layerGroup().addTo(MAP); // クラスタ廃止＝全ズームで個別ピン（canvas描画で軽量）
   // ズーム帯が変わったらピンの大きさを再調整（引くと小さく＝細かく、寄ると大きく）
   MAP.on('zoomend', ()=>{ const b=zoomBand(); if(b!==_lastBand){ _lastBand=b; if(ALL.length) apply(); } });
   DEPOTLAYER = L.layerGroup().addTo(MAP); // 拠点は非クラスタで最前面に
@@ -370,13 +366,14 @@ function match(p){
 async function apply(){
   if(state.kubun.has('解約') && !cxLoaded){ await loadCx(); }
   const shown = ALL.filter(match);
-  CLUSTER.clearLayers();
+  const r=radiusForZoom();
   const markers = shown.map(p=>{
-    const m=L.circleMarker([p.lat,p.lng],{radius:radiusForZoom(),weight:1.5,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.95});
+    const m=L.circleMarker([p.lat,p.lng],{radius:r,weight:1.2,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.95});
     m.bindPopup(popupHtml(p),{maxWidth:320});
     return m;
   });
-  CLUSTER.addLayers(markers);
+  if(CLUSTER) MAP.removeLayer(CLUSTER);
+  CLUSTER = L.layerGroup(markers).addTo(MAP); // 一括生成→1回描画（canvas）
   document.getElementById('count').textContent = `表示中: ${shown.length.toLocaleString()} 拠点`;
 }
 
