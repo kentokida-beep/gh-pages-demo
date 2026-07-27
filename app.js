@@ -28,6 +28,7 @@ let cxLoaded=false, cxLoading=false, cxCache=[];      // 解約は遅延読込
 let DEPOTLAYER=null, DEPOTS=null, depotLoading=false; // デポ/PC等の拠点レイヤ
 let SEARCHLAYER=null; // 最寄り検索の地点・線
 let NEAR_MARKERS=[];  // 最寄り上位のマーカー（カードクリックで移動）
+let SEARCH_ORIGIN=null; // 直近の検索地点[lat,lng]。設定中は全ピンのポップアップに距離を表示
 let _lastBand=null;
 function zoomBand(){ const z=MAP?MAP.getZoom():5; return z<=11?'s':(z<=14?'m':'l'); }
 function radiusForZoom(){ const z=MAP?MAP.getZoom():5; return z<=11?4 : (z<=13?6 : (z<=15?8 : 10)); }
@@ -230,7 +231,7 @@ async function apply(){
   const r=radiusForZoom();
   const markers = shown.map(p=>{
     const m=L.circleMarker([p.lat,p.lng],{radius:r,weight:1.2,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.95});
-    m.bindPopup(popupHtml(p),{maxWidth:320});
+    m.bindPopup(function(){return popupHtml(p);},{maxWidth:320}); // 開いた時に距離を計算
     return m;
   });
   if(CLUSTER) MAP.removeLayer(CLUSTER);
@@ -321,8 +322,11 @@ function buildColorUI(){
 
 function popupHtml(p){
   const row=(k,v)=> v?`<tr><td class="k">${k}</td><td>${esc(v)}</td></tr>`:'';
+  let distRow='';
+  if(SEARCH_ORIGIN){ const d=distKm(SEARCH_ORIGIN,[p.lat,p.lng]); distRow=`<tr><td class="k">検索地点からの距離</td><td><b>直線 ${d.toFixed(d<10?1:0)} km</b></td></tr>`; }
   return `<div class="lp"><b>${esc(p.name||'(名称なし)')}</b>${p.floor?' <span style="color:#64748b">'+esc(p.floor)+'</span>':''}
     <table>
+      ${distRow}
       ${row('住所',p.addr)}
       ${row('配送区分',p.kubun)}
       ${row('デポ/委託先',p.depot)}
@@ -508,10 +512,11 @@ function nearPopup(p,d){
 async function findNearest(){
   const q=document.getElementById('nearAddr').value.trim();
   const box=document.getElementById('near-result');
-  if(!q){ box.innerHTML=''; SEARCHLAYER.clearLayers(); return; }
+  if(!q){ box.innerHTML=''; SEARCHLAYER.clearLayers(); SEARCH_ORIGIN=null; return; }
   box.innerHTML='検索中…';
   const g=await geocodeOne(q);
   if(!g){ box.innerHTML='<span style="color:#f87171">住所から位置を特定できませんでした。市区町村＋番地の形で入れてみてください。</span>'; return; }
+  SEARCH_ORIGIN=g; // 以降、全ピンのポップアップに検索地点からの距離を表示
   const cands=ALL.filter(p=>p.kubun!=='解約');
   if(!cands.length){ box.innerHTML='データがまだ読み込まれていません。'; return; }
   const top=cands.map(p=>({p,d:distKm(g,[p.lat,p.lng])})).sort((a,b)=>a.d-b.d).slice(0,3);
