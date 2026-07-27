@@ -186,15 +186,17 @@ function buildFilters(){
   chips('f-day', [...DAYS,'なし'], state.day, null);
   // 都道府県
   const prefs=[...new Set(ALL.map(p=>p.pref).filter(Boolean))].sort();
-  const sel=document.getElementById('f-pref'); sel.innerHTML='<option value="">すべて</option>';
-  prefs.forEach(pf=>{ const o=document.createElement('option'); o.value=pf; o.textContent=pf; sel.appendChild(o); });
-  sel.onchange=()=>{ state.pref=sel.value; apply(); };
-  document.getElementById('kw').oninput=(e)=>{ state.kw=e.target.value.trim(); apply(); };
+  const sel=document.getElementById('f-pref');
+  if(sel){ sel.innerHTML='<option value="">すべて</option>';
+    prefs.forEach(pf=>{ const o=document.createElement('option'); o.value=pf; o.textContent=pf; sel.appendChild(o); });
+    sel.onchange=()=>{ state.pref=sel.value; apply(); }; }
+  const kwEl=document.getElementById('kw');
+  if(kwEl) kwEl.oninput=(e)=>{ state.kw=e.target.value.trim(); apply(); };
   buildColorUI();
 }
 
 function chips(containerId, items, set, colors){
-  const box=document.getElementById(containerId); box.innerHTML='';
+  const box=document.getElementById(containerId); if(!box) return; box.innerHTML='';
   items.forEach(it=>{
     const el=document.createElement('span');
     el.className='chip'+(set.has(it)?' on':'');
@@ -265,7 +267,7 @@ async function loadCx(){
 
 // ===== 拠点レイヤ（デポ/PC等）=====
 function chipsDepot(){
-  const box=document.getElementById('f-depot'); box.innerHTML='';
+  const box=document.getElementById('f-depot'); if(!box) return; box.innerHTML='';
   Object.keys(DEPOT_STYLE).forEach(t=>{
     const el=document.createElement('span'); el.className='chip'+(state.depotTypes.has(t)?' on':'');
     el.innerHTML=`<span class="dot" style="background:${DEPOT_STYLE[t].c}"></span><span>${DEPOT_STYLE[t].e} ${t}</span>`;
@@ -300,13 +302,13 @@ function tally(keyFn){
   return {cnt,keys,col};
 }
 function fillSelect(id,keys,cnt,cur,onch){
-  const sel=document.getElementById(id);
+  const sel=document.getElementById(id); if(!sel) return;
   sel.innerHTML='<option value="">すべて表示</option>'+keys.map(k=>`<option value="${k.replace(/"/g,'')}">${k}（${cnt[k]}）</option>`).join('');
   sel.value=cur; sel.onchange=()=>onch(sel.value);
 }
 function buildColorUI(){
-  // 色分けモード
-  const cm=document.getElementById('f-colormode'); cm.innerHTML='';
+  // 色分けモード（簡易版など色分けUIが無い場合はスキップ）
+  const cm=document.getElementById('f-colormode'); if(!cm) return; cm.innerHTML='';
   [['kubun','配送区分'],['depot','担当デポ/SDS'],['pc','発送元PC']].forEach(([v,label])=>{
     const el=document.createElement('span'); el.className='chip'+(state.colorMode===v?' on':'');
     el.textContent=label;

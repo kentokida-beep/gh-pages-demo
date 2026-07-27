@@ -41,8 +41,7 @@
   details.sec[open]>summary::before{ content:"▾"; }
   /* 地図タイルを淡く＝地名などを目立たせず、色付きピンを際立たせる */
   .leaflet-tile-pane{ filter:grayscale(1) brightness(1.16) contrast(0.82) opacity(0.68); } /* 色を抜き、記号・地名を極力薄く（無地寄り） */
-  #admin-sec{ display:none; }
-  details.sec{ display:none !important; } /* 簡易版：詳細フィルタ類は非表示 */ /* CSV更新は管理者がコマンドで実施（アプリ内アップロードは非表示） */
+  #admin-sec{ display:none; } /* CSV更新は管理者がコマンドで実施（アプリ内アップロードは非表示） */
   @media(max-width:640px){ #app{ flex-direction:column; } #sidebar{ width:100%; flex:0 0 auto; max-height:42%; } }
   #unres-modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; display:none; align-items:center; justify-content:center; }
   #unres-modal .card{ background:#fff; color:#0f172a; border-radius:12px; width:min(760px,92vw); max-height:82vh; display:flex; flex-direction:column; overflow:hidden; }
@@ -111,49 +110,8 @@
       <div id="near-result" style="margin-top:10px;font-size:12px;"></div>
     </div>
 
-    <details class="sec"><summary>🔍 絞り込み・色分け（詳細）</summary>
-    <div class="group" style="margin-top:10px;">
-      <h2>ピンの色分け</h2>
-      <div class="chips" id="f-colormode"></div>
-      <div id="color-legend" style="display:none;max-height:220px;overflow:auto;margin-top:8px;font-size:11px;"></div>
-    </div>
-
-    <div class="group">
-      <h2>担当デポ / SDS で絞り込み</h2>
-      <select id="f-depotfilter"><option value="">すべて表示</option></select>
-    </div>
-
-    <div class="group">
-      <h2>発送元PC で絞り込み</h2>
-      <select id="f-pcfilter"><option value="">すべて表示</option></select>
-    </div>
-
-    <div class="group">
-      <h2>配送区分</h2>
-      <div class="chips" id="f-kubun"></div>
-    </div>
-
-    <div class="group">
-      <h2>プラン</h2>
-      <div class="chips" id="f-plan"></div>
-    </div>
-
-    <div class="group">
-      <h2>配達曜日（デリバリー）</h2>
-      <div class="chips" id="f-day"></div>
-    </div>
-
-    <div class="group">
-      <h2>都道府県</h2>
-      <select id="f-pref"><option value="">すべて</option></select>
-    </div>
-
-    <div class="group">
-      <h2>拠点レイヤ（デポ・PC等）</h2>
-      <div class="chips" id="f-depot"></div>
-      <div style="font-size:10px;color:#64748b;margin-top:6px;">クリックで拠点の位置を重ねて表示</div>
-    </div>
-    </details>
+        <div class="group"><h2>配送区分でソート</h2><div class="chips" id="f-kubun"></div></div>
+    <div class="group"><h2>プラン</h2><div class="chips" id="f-plan"></div></div>
 
     <div class="count" id="count"></div>
     <div class="foot" id="foot"></div>
