@@ -34,7 +34,8 @@ function zoomBand(){ const z=MAP?MAP.getZoom():5; return z<=11?'s':(z<=14?'m':'l
 function radiusForZoom(){ const z=MAP?MAP.getZoom():5; return z<=11?4 : (z<=13?6 : (z<=15?8 : 10)); }
 function focusNear(i){ const m=NEAR_MARKERS[i]; if(!m) return; MAP.setView(m.getLatLng(),16,{animate:true}); m.openPopup(); }
 window.focusNear=focusNear;
-const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', pcFilter:'' };
+const SIMPLE = !!window.SIMPLE; // 簡易版フラグ（simple.htmlで window.SIMPLE=true）
+const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', pcFilter:'', simpleG:new Set(['デリバリー','宅急便']) };
 
 // デポ色分け用パレット（見分けやすい24色を循環）
 const PALETTE = ['#e6194B','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#800000','#aaffc3','#808000','#ffd8b1','#000075','#a9a9a9','#e6beff','#ff4500','#1e90ff','#228B22','#b03060','#00ced1'];
@@ -171,7 +172,19 @@ async function loadData(){
 }
 window.loadData=loadData;
 
+function buildSimpleFilters(){
+  // 配送区分＝デリバリー/宅急便 の2択（宅急便は冷凍も含む）
+  chips('f-kubun', ['デリバリー','宅急便'], state.simpleG, {'デリバリー':KUBUN_COLORS['デリバリー'],'宅急便':KUBUN_COLORS['宅急便']});
+  // プラン
+  const plans=[...new Set(ALL.flatMap(p=>p.plans||[]))].sort();
+  state.plan=new Set(plans); chips('f-plan', plans, state.plan, null);
+  // 配達曜日（デリバリー用）
+  state.day=new Set(['月','火','水','木','金']);
+  chips('f-day', ['月','火','水','木','金'], state.day, null);
+  const kwEl=document.getElementById('kw'); if(kwEl) kwEl.oninput=(e)=>{ state.kw=e.target.value.trim(); apply(); };
+}
 function buildFilters(){
+  if(SIMPLE){ buildSimpleFilters(); return; }
   // 区分（稼働はデータから／「解約」は遅延読込チップとして常設・初期OFF）
   const kubuns=[...new Set(ALL.map(p=>p.kubun))].sort();
   state.kubun = new Set(kubuns);
@@ -207,7 +220,19 @@ function chips(containerId, items, set, colors){
   });
 }
 
+function matchSimple(p){
+  // 配送区分＝デリバリー / 宅急便(冷凍含む)。未設定・解約は簡易版では非表示
+  const g = p.kubun==='デリバリー' ? 'デリバリー'
+          : ((p.kubun==='宅急便'||p.kubun==='宅急便(冷凍)') ? '宅急便' : null);
+  if(!g || !state.simpleG.has(g)) return false;
+  if((p.plans||[]).length && !p.plans.some(pl=>state.plan.has(pl))) return false;
+  // 曜日はデリバリーのみに適用（宅急便は曜日不問）
+  if(g==='デリバリー'){ const days=p.days||[]; if(days.length && !days.some(d=>state.day.has(d))) return false; }
+  if(state.kw){ const s=(p.name+' '+p.addr).toLowerCase(); if(s.indexOf(state.kw.toLowerCase())<0) return false; }
+  return true;
+}
 function match(p){
+  if(SIMPLE) return matchSimple(p);
   if(!state.kubun.has(p.kubun)) return false;
   if(state.depotFilter && primaryDepot(p)!==state.depotFilter) return false;
   if(state.pcFilter && primaryPC(p)!==state.pcFilter) return false;
@@ -232,7 +257,7 @@ function updateDeliveryChip(){
   const onlyGohan = state.plan.has('ごはん') && !state.plan.has('やさい');
   box.querySelectorAll('.chip').forEach(el=>{
     if(el.textContent.indexOf('デリバリー')>=0){
-      if(onlyGohan){ el.style.opacity='0.35'; el.style.pointerEvents='none'; el.classList.remove('on'); state.kubun.delete('デリバリー'); el.title='ごはんプランはデリバリー不可'; }
+      if(onlyGohan){ el.style.opacity='0.35'; el.style.pointerEvents='none'; el.classList.remove('on'); state.kubun.delete('デリバリー'); if(state.simpleG) state.simpleG.delete('デリバリー'); el.title='ごはんプランはデリバリー不可'; }
       else { el.style.opacity=''; el.style.pointerEvents=''; el.title=''; }
     }
   });
