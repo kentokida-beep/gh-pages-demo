@@ -252,18 +252,27 @@ function match(p){
   return true;
 }
 
-function updateDeliveryChip(){
-  const box=document.getElementById('f-kubun'); if(!box) return;
-  const onlyGohan = state.plan.has('ごはん') && !state.plan.has('やさい');
-  box.querySelectorAll('.chip').forEach(el=>{
-    if(el.textContent.indexOf('デリバリー')>=0){
-      if(onlyGohan){ el.style.opacity='0.35'; el.style.pointerEvents='none'; el.classList.remove('on'); state.kubun.delete('デリバリー'); if(state.simpleG) state.simpleG.delete('デリバリー'); el.title='ごはんプランはデリバリー不可'; }
-      else { el.style.opacity=''; el.style.pointerEvents=''; el.title=''; }
-    }
+function setChip(el, disabled, onDisable, title){
+  if(disabled){ el.style.opacity='0.35'; el.style.pointerEvents='none'; el.classList.remove('on'); onDisable(); el.title=title; }
+  else { el.style.opacity=''; el.style.pointerEvents=''; el.title=''; }
+}
+function updateExclusions(){ // ごはん⇔デリバリー は相互排他
+  const kbox=document.getElementById('f-kubun');
+  const pbox=document.getElementById('f-plan');
+  const kset = SIMPLE ? state.simpleG : state.kubun;
+  const onlyGohan    = state.plan.has('ごはん') && !state.plan.has('やさい');
+  const onlyDelivery = kset.has('デリバリー') && !kset.has('宅急便') && !kset.has('宅急便(冷凍)');
+  if(kbox) kbox.querySelectorAll('.chip').forEach(el=>{
+    if(el.textContent.indexOf('デリバリー')>=0)
+      setChip(el, onlyGohan, ()=>{ state.kubun.delete('デリバリー'); if(state.simpleG) state.simpleG.delete('デリバリー'); }, 'ごはんプランはデリバリー不可');
+  });
+  if(pbox) pbox.querySelectorAll('.chip').forEach(el=>{
+    if(el.textContent.trim()==='ごはん')
+      setChip(el, onlyDelivery, ()=>{ state.plan.delete('ごはん'); }, 'デリバリーはごはんプラン不可');
   });
 }
 async function apply(){
-  updateDeliveryChip();
+  updateExclusions();
   if(state.kubun.has('解約') && !cxLoaded){ await loadCx(); }
   const shown = ALL.filter(match);
   const r=radiusForZoom();
