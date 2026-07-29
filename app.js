@@ -158,8 +158,9 @@ async function loadData(){
     const d=await fetchData('active');
     cxLoaded=false; cxCache=[]; // 解約は再取得
     ALL=(d.points||[]).map(expandPt).filter(p=>typeof p.lat==='number' && typeof p.lng==='number');
+    if(!SIMPLE) ALL=ALL.filter(p=>p.kubun!=='未設定'); // DS(詳細)版でも未設定は地図に出さない（配信データ自体は残す）
     document.getElementById('meta').textContent=
-      `データ生成: ${d.generatedAt||'-'} ／ 稼働 ${ (d.stats&&d.stats.active_locations)||ALL.length } 拠点`;
+      `データ生成: ${d.generatedAt||'-'} ／ 稼働 ${ALL.length.toLocaleString()} 拠点`;
     buildFilters();
     await apply();
     if(timer)clearInterval(timer);
