@@ -566,8 +566,11 @@ async function findNearest(){
   const g=await geocodeOne(q);
   if(!g){ box.innerHTML='<span style="color:#f87171">住所から位置を特定できませんでした。市区町村＋番地の形で入れてみてください。</span>'; return; }
   SEARCH_ORIGIN=g; // 以降、全ピンのポップアップに検索地点からの距離を表示
-  const cands=ALL.filter(p=>p.kubun!=='解約');
-  if(!cands.length){ box.innerHTML='データがまだ読み込まれていません。'; return; }
+  // 現在の絞り込み(配送区分など)に一致する企業だけを最寄り候補にする。
+  // 絞り込みなし(既定=全ON)なら全件が候補＝全プランから最寄りを抽出。解約は常に候補から除外。
+  if(!ALL.length){ box.innerHTML='データがまだ読み込まれていません。'; return; }
+  const cands=ALL.filter(p=>p.kubun!=='解約' && match(p));
+  if(!cands.length){ box.innerHTML='<span style="color:#f87171">現在の絞り込み条件に合う企業が見つかりませんでした。配送区分などの絞り込みを解除すると、全件から最寄りを検索します。</span>'; return; }
   const top=cands.map(p=>({p,d:distKm(g,[p.lat,p.lng])})).sort((a,b)=>a.d-b.d).slice(0,3);
   // 地図に検索地点＋最寄り企業を表示（番号なし・タップで距離入りポップアップ）
   SEARCHLAYER.clearLayers();
