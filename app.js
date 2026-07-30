@@ -35,7 +35,7 @@ function radiusForZoom(){ const z=MAP?MAP.getZoom():5; return z<=11?4 : (z<=13?6
 function focusNear(i){ const m=NEAR_MARKERS[i]; if(!m) return; MAP.setView(m.getLatLng(),16,{animate:true}); m.openPopup(); }
 window.focusNear=focusNear;
 const SIMPLE = !!window.SIMPLE; // 簡易版フラグ（simple.htmlで window.SIMPLE=true）
-const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', pcFilter:'', simpleG:new Set(['デリバリー','宅急便']) };
+const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', pcFilter:'', simpleG:new Set(['デリバリー','宅急便','未設定']) };
 
 // デポ色分け用パレット（見分けやすい24色を循環）
 const PALETTE = ['#e6194B','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#800000','#aaffc3','#808000','#ffd8b1','#000075','#a9a9a9','#e6beff','#ff4500','#1e90ff','#228B22','#b03060','#00ced1'];
@@ -174,8 +174,8 @@ async function loadData(){
 window.loadData=loadData;
 
 function buildSimpleFilters(){
-  // 配送区分＝デリバリー/宅急便 の2択（宅急便は冷凍も含む）
-  chips('f-kubun', ['デリバリー','宅急便'], state.simpleG, {'デリバリー':KUBUN_COLORS['デリバリー'],'宅急便':KUBUN_COLORS['宅急便']});
+  // 配送区分＝デリバリー/宅急便/未設定（宅急便は冷凍も含む。未設定は簡易版のみ表示）
+  chips('f-kubun', ['デリバリー','宅急便','未設定'], state.simpleG, {'デリバリー':KUBUN_COLORS['デリバリー'],'宅急便':KUBUN_COLORS['宅急便'],'未設定':KUBUN_COLORS['未設定']});
   // プラン
   const plans=[...new Set(ALL.flatMap(p=>p.plans||[]))].sort();
   state.plan=new Set(plans); chips('f-plan', plans, state.plan, null);
@@ -224,7 +224,8 @@ function chips(containerId, items, set, colors){
 function matchSimple(p){
   // 配送区分＝デリバリー / 宅急便(冷凍含む)。未設定・解約は簡易版では非表示
   const g = p.kubun==='デリバリー' ? 'デリバリー'
-          : ((p.kubun==='宅急便'||p.kubun==='宅急便(冷凍)') ? '宅急便' : null);
+          : ((p.kubun==='宅急便'||p.kubun==='宅急便(冷凍)') ? '宅急便'
+          : (p.kubun==='未設定' ? '未設定' : null));
   if(!g || !state.simpleG.has(g)) return false;
   if((p.plans||[]).length && !p.plans.some(pl=>state.plan.has(pl))) return false;
   // 曜日はデリバリーのみに適用（宅急便は曜日不問）
