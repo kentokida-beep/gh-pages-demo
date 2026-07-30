@@ -189,7 +189,7 @@ function buildSimpleFilters(){
   // 配達曜日（デリバリー用）
   state.day=new Set(['月','火','水','木','金']);
   chips('f-day', ['月','火','水','木','金'], state.day, null);
-  const kwEl=document.getElementById('kw'); if(kwEl) kwEl.oninput=(e)=>{ state.kw=e.target.value.trim(); apply(); };
+  const kwEl=document.getElementById('kw'); if(kwEl){ kwEl.oninput=(e)=>{ state.kw=e.target.value.trim(); apply(); }; kwEl.onkeydown=(e)=>{ if(e.key==='Enter') flyToKeyword(); }; }
 }
 function buildFilters(){
   if(SIMPLE){ buildSimpleFilters(); return; }
@@ -212,7 +212,7 @@ function buildFilters(){
     prefs.forEach(pf=>{ const o=document.createElement('option'); o.value=pf; o.textContent=pf; sel.appendChild(o); });
     sel.onchange=()=>{ state.pref=sel.value; apply(); }; }
   const kwEl=document.getElementById('kw');
-  if(kwEl) kwEl.oninput=(e)=>{ state.kw=e.target.value.trim(); apply(); };
+  if(kwEl){ kwEl.oninput=(e)=>{ state.kw=e.target.value.trim(); apply(); }; kwEl.onkeydown=(e)=>{ if(e.key==='Enter') flyToKeyword(); }; }
   buildColorUI();
 }
 
@@ -294,7 +294,7 @@ async function apply(){
   // ずらすのは表示位置だけ。距離計算やデータ(p.lat/p.lng)は実座標のまま。
   const groups={};
   shown.forEach(p=>{ const k=p.lat.toFixed(6)+','+p.lng.toFixed(6); (groups[k]=groups[k]||[]).push(p); });
-  const SEP=0.00030; // 隣接ピン間の目安(約33m)。ズームすると扇状に開く
+  const SEP=0.00016; // 隣接ピン間の目安(約18m)。広がりすぎないよう控えめ。ズームすると扇状に開く
   const markers=[];
   for(const k in groups){
     const g=groups[k];
@@ -610,10 +610,10 @@ async function findNearest(){
     NEAR_MARKERS[i]=L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:2500}).bindPopup(nearPopup(p,s.d)).addTo(SEARCHLAYER);
     bounds.push([p.lat,p.lng]);
   });
-  MAP.fitBounds(bounds,{padding:[70,70],maxZoom:15});
+  MAP.fitBounds(bounds,{padding:[70,70],maxZoom:16});
   if(NEAR_MARKERS[0]) NEAR_MARKERS[0].openPopup(); // 最寄り1社の距離ポップアップを自動表示
-  // 結果カード（近い順・番号なし）
-  box.innerHTML=top.map((s,i)=>{
+  // 結果カード（近い順・番号なし）＋ ✕クリア
+  box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="color:#94a3b8;font-size:11px;">最寄り3件（近い順）</span><button onclick="clearNearest()" style="border:none;background:#334155;color:#e2e8f0;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;">✕ クリア</button></div>'+top.map((s,i)=>{
     const p=s.p, c=KUBUN_COLORS[p.kubun]||'#f59e0b';
     const days=(p.days||[]).length ? (p.days.join('・')+'曜') : '曜日指定なし';
     const detail=[p.depot,p.pc].filter(Boolean).join(' ／ ');
@@ -628,6 +628,23 @@ async function findNearest(){
 }
 window.findNearest=findNearest;
 document.getElementById('nearBtn').onclick=findNearest;
+
+// 最寄り検索の結果・ピン・検索地点・距離表示をまとめてクリア
+function clearNearest(){
+  const el=document.getElementById('nearAddr'); if(el) el.value='';
+  const box=document.getElementById('near-result'); if(box) box.innerHTML='';
+  if(SEARCHLAYER) SEARCHLAYER.clearLayers();
+  NEAR_MARKERS=[]; SEARCH_ORIGIN=null;
+}
+window.clearNearest=clearNearest;
+// キーワード欄でEnter→一致した拠点へ地図を移動（検索先まで移動）。0件や広すぎる絞り込みでは動かさない。
+function flyToKeyword(){
+  if(!state.kw || !ALL.length) return;
+  const m=ALL.filter(match);
+  if(!m.length || m.length>150) return;
+  MAP.fitBounds(m.map(p=>[p.lat,p.lng]),{padding:[60,60],maxZoom:16});
+}
+window.flyToKeyword=flyToKeyword;
 
 // ===== 座標未解決リスト（閲覧）=====
 let UNRESOLVED=[];
