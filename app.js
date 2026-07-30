@@ -278,11 +278,27 @@ async function apply(){
   if(state.kubun.has('解約') && !cxLoaded){ await loadCx(); }
   const shown = ALL.filter(match);
   const r=radiusForZoom();
-  const markers = shown.map(p=>{
-    const m=L.circleMarker([p.lat,p.lng],{radius:r,weight:1.2,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.95});
-    m.bindPopup(function(){return popupHtml(p);},{maxWidth:320}); // 開いた時に距離を計算
+  const mk=(p,lat,lng)=>{
+    const m=L.circleMarker([lat,lng],{radius:r,weight:1.2,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.95});
+    m.bindPopup(function(){return popupHtml(p);},{maxWidth:320}); // 開いた時に距離を計算（実座標p基準）
     return m;
-  });
+  };
+  // 同一座標に重なるピン（同一拠点の複数プラン等）は小さな円状に少しずらし、全て選べるようにする。
+  // ずらすのは表示位置だけ。距離計算やデータ(p.lat/p.lng)は実座標のまま。
+  const groups={};
+  shown.forEach(p=>{ const k=p.lat.toFixed(6)+','+p.lng.toFixed(6); (groups[k]=groups[k]||[]).push(p); });
+  const SEP=0.00030; // 隣接ピン間の目安(約33m)。ズームすると扇状に開く
+  const markers=[];
+  for(const k in groups){
+    const g=groups[k];
+    if(g.length===1){ markers.push(mk(g[0], g[0].lat, g[0].lng)); continue; }
+    const R=SEP/(2*Math.sin(Math.PI/g.length));        // 隣接間隔を一定に保つ半径
+    const clat=Math.cos(g[0].lat*Math.PI/180)||1;      // 経度方向の距離補正
+    g.forEach((p,i)=>{
+      const a=2*Math.PI*i/g.length - Math.PI/2;         // 上から時計回りに配置
+      markers.push(mk(p, p.lat + R*Math.sin(a), p.lng + R*Math.cos(a)/clat));
+    });
+  }
   if(CLUSTER) MAP.removeLayer(CLUSTER);
   CLUSTER = L.layerGroup(markers).addTo(MAP); // 一括生成→1回描画（canvas）
   document.getElementById('count').textContent = `表示中: ${shown.length.toLocaleString()} 拠点`;
