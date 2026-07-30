@@ -159,6 +159,13 @@ async function loadData(){
     cxLoaded=false; cxCache=[]; // 解約は再取得
     ALL=(d.points||[]).map(expandPt).filter(p=>typeof p.lat==='number' && typeof p.lng==='number');
     if(!SIMPLE) ALL=ALL.filter(p=>p.kubun!=='未設定'); // DS(詳細)版でも未設定は地図に出さない（配信データ自体は残す）
+    // 重複(幽霊)ピン除去: プラン空かつ個数0で、同一拠点(企業|フロア|住所|配送区分)にプラン付きピンが別途ある場合は
+    // それの中身なし重複なので除外（プラン欄が空のCMS行が別ピンを生むのを防ぐ）。プラン付き兄弟がいない空プランは実在拠点として残す。
+    {
+      const planned=new Set();
+      ALL.forEach(p=>{ if(p.plans&&p.plans.length) planned.add(p.name+'|'+p.floor+'|'+p.addr+'|'+p.kubun); });
+      ALL=ALL.filter(p=> (p.plans&&p.plans.length) || p.count || !planned.has(p.name+'|'+p.floor+'|'+p.addr+'|'+p.kubun));
+    }
     document.getElementById('meta').textContent=
       `データ生成: ${d.generatedAt||'-'} ／ 稼働 ${ALL.length.toLocaleString()} 拠点`;
     buildFilters();
