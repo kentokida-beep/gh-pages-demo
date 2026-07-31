@@ -41,6 +41,7 @@ const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水',
 const PALETTE = ['#e6194B','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#800000','#aaffc3','#808000','#ffd8b1','#000075','#a9a9a9','#e6beff','#ff4500','#1e90ff','#228B22','#b03060','#00ced1'];
 let DEPOT_COLORS = {}, DEPOT_COUNTS = {};   // 担当デポ名 -> 色/件数
 let PC_COLORS = {}, PC_COUNTS = {};         // PC名 -> 色/件数
+let ROUTE_DAY=null, ROUTE_DEPOT='';         // デリバリー配送ルート（曜日→デポ）の選択状態（DS版のみ）
 
 // 併記(「/」)から実デポ/SDS名を1つ取り出す（宅急便/宅配/メーカー/冷凍を含む語は除外）
 function primaryDepot(p){
@@ -214,7 +215,71 @@ function buildFilters(){
   const kwEl=document.getElementById('kw');
   if(kwEl){ kwEl.oninput=(e)=>{ state.kw=e.target.value.trim(); apply(); }; kwEl.onkeydown=(e)=>{ if(e.key==='Enter') flyToKeyword(); }; }
   buildColorUI();
+  buildRouteUI();
 }
+
+// ===== デリバリー配送ルート（曜日→デポ）ドリルダウン（DS版のみ・#route-days が無ければ何もしない）=====
+function buildRouteUI(){
+  const box=document.getElementById('route-days'); if(!box) return;
+  box.innerHTML='';
+  DAYS.forEach(d=>{
+    const el=document.createElement('span'); el.className='chip'+(ROUTE_DAY===d?' on':''); el.dataset.day=d;
+    el.innerHTML='<span>'+d+'曜</span>';
+    el.onclick=()=>{ (ROUTE_DAY===d) ? routeReset() : routeSelectDay(d); };
+    box.appendChild(el);
+  });
+  renderRouteDepots();
+}
+function routeDepotCounts(day){
+  const m={};
+  ALL.forEach(p=>{ if(p.kubun!=='デリバリー') return; if(!(p.days||[]).includes(day)) return; const d=primaryDepot(p); m[d]=(m[d]||0)+1; });
+  return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+}
+function renderRouteDepots(){
+  const wrap=document.getElementById('route-depots'); if(!wrap) return;
+  if(!ROUTE_DAY){ wrap.innerHTML='<div style="font-size:11px;color:#64748b;margin-top:6px;">曜日を選んでください。</div>'; return; }
+  const list=routeDepotCounts(ROUTE_DAY);
+  const total=list.reduce((s,x)=>s+x[1],0);
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 6px;"><span style="font-size:11px;color:#94a3b8;">${ROUTE_DAY}曜のデポ（${list.length}）</span><span onclick="routeReset()" style="font-size:11px;color:#7dd3fc;cursor:pointer;">× 解除</span></div>`;
+  html+=`<div class="routerow${ROUTE_DEPOT===''?' on':''}" data-depot=""><span>▼ すべてのデポ</span><span class="cnt">${total}社</span></div>`;
+  html+=list.map(([k,v])=>`<div class="routerow${ROUTE_DEPOT===k?' on':''}" data-depot="${esc(k).replace(/"/g,'&quot;')}"><span>${esc(k)}</span><span class="cnt">${v}</span></div>`).join('');
+  wrap.innerHTML=html;
+  wrap.querySelectorAll('.routerow').forEach(el=>el.onclick=()=>routeSelectDepot(el.getAttribute('data-depot')));
+}
+function routeSelectDay(day){
+  ROUTE_DAY=day; ROUTE_DEPOT='';
+  document.querySelectorAll('#route-days .chip').forEach(el=>el.classList.toggle('on', el.dataset.day===day));
+  state.kubun=new Set(['デリバリー']); state.day=new Set([day]); state.depotFilter=''; state.pcFilter='';
+  syncMainControls(); renderRouteDepots();
+  apply().then(fitToShown);
+}
+function routeSelectDepot(depot){
+  if(!ROUTE_DAY) return;
+  ROUTE_DEPOT=depot; state.depotFilter=depot;
+  syncMainControls(); renderRouteDepots();
+  apply().then(fitToShown);
+}
+function routeReset(){
+  ROUTE_DAY=null; ROUTE_DEPOT='';
+  document.querySelectorAll('#route-days .chip').forEach(el=>el.classList.remove('on'));
+  state.kubun=new Set(ALL.map(p=>p.kubun)); state.day=new Set([...DAYS,'なし']);
+  state.plan=new Set(ALL.flatMap(p=>p.plans||[])); // 相互排他で外れた「ごはん」等を全復帰
+  state.depotFilter=''; state.pcFilter='';
+  syncMainControls(); renderRouteDepots();
+  apply();
+}
+function syncMainControls(){
+  document.querySelectorAll('#f-kubun .chip').forEach(el=>{ const t=el.textContent.trim(); el.classList.toggle('on', state.kubun.has(t)); });
+  document.querySelectorAll('#f-day .chip').forEach(el=>{ const t=el.textContent.trim(); el.classList.toggle('on', state.day.has(t)); });
+  document.querySelectorAll('#f-plan .chip').forEach(el=>{ const t=el.textContent.trim(); el.classList.toggle('on', state.plan.has(t)); });
+  const ds=document.getElementById('f-depotfilter'); if(ds) ds.value=state.depotFilter||'';
+  const ps=document.getElementById('f-pcfilter'); if(ps) ps.value=state.pcFilter||'';
+}
+function fitToShown(){
+  const m=ALL.filter(match); if(!m.length) return;
+  MAP.fitBounds(m.map(p=>[p.lat,p.lng]),{padding:[50,50],maxZoom:15});
+}
+window.routeReset=routeReset;
 
 function chips(containerId, items, set, colors){
   const box=document.getElementById(containerId); if(!box) return; box.innerHTML='';

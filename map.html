@@ -52,6 +52,13 @@
   table.ul{ width:100%; border-collapse:collapse; font-size:12px; }
   table.ul th{ text-align:left; background:#f1f5f9; padding:6px 8px; position:sticky; top:0; }
   table.ul td{ border-top:1px solid #eef2f7; padding:5px 8px; vertical-align:top; }
+  /* デリバリー配送ルート（曜日→デポ）*/
+  #route-depots{ max-height:300px; overflow:auto; margin-top:8px; }
+  .routerow{ display:flex; justify-content:space-between; gap:8px; padding:6px 9px; border-radius:7px; cursor:pointer; border:1px solid #1e293b; margin-bottom:4px; background:#0f1e35; }
+  .routerow:hover{ background:#14284a; }
+  .routerow.on{ background:#1d4ed8; border-color:#3b82f6; color:#fff; }
+  .routerow .cnt{ color:#94a3b8; flex:0 0 auto; }
+  .routerow.on .cnt{ color:#dbeafe; }
 </style>
 </head>
 <body>
@@ -108,6 +115,13 @@
       <input type="text" id="nearAddr" placeholder="例：渋谷区道玄坂1-2-3" onkeypress="if(event.key==='Enter')findNearest()">
       <button id="nearBtn" style="margin-top:8px;width:100%;padding:8px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-weight:700;cursor:pointer;">最寄りを検索</button>
       <div id="near-result" style="margin-top:10px;font-size:12px;"></div>
+    </div>
+
+    <div class="group" id="route-box" style="background:#0b1a2e;border:1px solid #1e3a5f;border-radius:10px;padding:12px;">
+      <h2>🚚 デリバリー配送ルート（曜日→デポ）</h2>
+      <div style="font-size:11px;color:#94a3b8;margin:2px 0 8px;line-height:1.5;">曜日を選ぶと、その曜日に配達しているデポ一覧が出ます。デポをクリックで該当企業に絞り込み＆地図移動します。</div>
+      <div class="chips" id="route-days"></div>
+      <div id="route-depots"></div>
     </div>
 
     <details class="sec" open><summary>🔍 絞り込み・色分け（詳細）</summary>
