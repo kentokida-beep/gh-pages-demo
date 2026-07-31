@@ -374,16 +374,8 @@ async function apply(){
   if(state.kubun.has('解約') && !cxLoaded){ await loadCx(); }
   const shown = ALL.filter(match);
   const r=radiusForZoom();
-  const useTeardrop = ROUTE_ACTIVE && shown.length<=3000; // 配送ルート表示時はMyMaps風のしずく型ピン（件数が少ない時のみ）
   const mk=(p,lat,lng)=>{
-    const c=colorOf(p);
-    let m;
-    if(useTeardrop){
-      const html=`<svg width="20" height="27" viewBox="0 0 24 32" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))"><path d="M12 0C5.37 0 0 5.37 0 12c0 8.4 12 20 12 20s12-11.6 12-20C24 5.37 18.63 0 12 0z" fill="${c}" stroke="#ffffff" stroke-width="1.6"/><circle cx="12" cy="12" r="4.2" fill="#ffffff" fill-opacity="0.6"/></svg>`;
-      m=L.marker([lat,lng],{icon:L.divIcon({className:'',html,iconSize:[20,27],iconAnchor:[10,27],popupAnchor:[0,-24]})});
-    } else {
-      m=L.circleMarker([lat,lng],{radius:r,weight:1.2,color:'#ffffff',fillColor:c,fillOpacity:0.95});
-    }
+    const m=L.circleMarker([lat,lng],{radius:r,weight:1.2,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.95});
     m.bindPopup(function(){return popupHtml(p);},{maxWidth:320}); // 開いた時に距離を計算（実座標p基準）
     return m;
   };
