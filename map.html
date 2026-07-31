@@ -52,13 +52,21 @@
   table.ul{ width:100%; border-collapse:collapse; font-size:12px; }
   table.ul th{ text-align:left; background:#f1f5f9; padding:6px 8px; position:sticky; top:0; }
   table.ul td{ border-top:1px solid #eef2f7; padding:5px 8px; vertical-align:top; }
-  /* デリバリー配送ルート（曜日→デポ）*/
-  #route-depots{ max-height:300px; overflow:auto; margin-top:8px; }
-  .routerow{ display:flex; justify-content:space-between; gap:8px; padding:6px 9px; border-radius:7px; cursor:pointer; border:1px solid #1e293b; margin-bottom:4px; background:#0f1e35; }
+  /* デリバリー配送ルート（曜日・デポを複数ON/OFF）*/
+  #route-depots{ max-height:340px; overflow:auto; margin-top:8px; }
+  .route-head{ display:flex; justify-content:space-between; align-items:center; margin:6px 0; font-size:11px; color:#94a3b8; }
+  .route-clear{ color:#7dd3fc; cursor:pointer; }
+  .routerow{ display:flex; align-items:center; gap:7px; padding:6px 9px; border-radius:7px; cursor:pointer; border:1px solid #1e293b; margin-bottom:4px; background:#0f1e35; font-size:13px; }
   .routerow:hover{ background:#14284a; }
-  .routerow.on{ background:#1d4ed8; border-color:#3b82f6; color:#fff; }
+  .routerow.on{ background:#122443; }
+  .routerow.allrow{ background:#0b1626; font-weight:600; }
+  .routerow .rname{ flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .routerow .cnt{ color:#94a3b8; flex:0 0 auto; }
   .routerow.on .cnt{ color:#dbeafe; }
+  .routerow .pindot{ display:inline-block; width:11px; height:11px; border-radius:50%; border:1px solid rgba(255,255,255,.5); flex:0 0 auto; }
+  .routerow .cbx{ display:inline-block; width:15px; height:15px; border-radius:4px; border:2px solid #475569; flex:0 0 auto; position:relative; box-sizing:border-box; }
+  .routerow .cbx.on{ background:#2563eb; border-color:#3b82f6; }
+  .routerow .cbx.on::after{ content:''; position:absolute; left:3px; top:0; width:4px; height:8px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
 </style>
 </head>
 <body>
@@ -119,7 +127,7 @@
 
     <div class="group" id="route-box" style="background:#0b1a2e;border:1px solid #1e3a5f;border-radius:10px;padding:12px;">
       <h2>🚚 デリバリー配送ルート（曜日→デポ）</h2>
-      <div style="font-size:11px;color:#94a3b8;margin:2px 0 8px;line-height:1.5;">曜日を選ぶと、その曜日に配達しているデポ一覧が出ます。デポをクリックで該当企業に絞り込み＆地図移動します。</div>
+      <div style="font-size:11px;color:#94a3b8;margin:2px 0 8px;line-height:1.5;">曜日（複数可）を選ぶと、その曜日に配達するデポ一覧が出ます。各デポのチェックで表示ON/OFF、地図はデポ色のしずく型ピンで表示します。</div>
       <div class="chips" id="route-days"></div>
       <div id="route-depots"></div>
     </div>

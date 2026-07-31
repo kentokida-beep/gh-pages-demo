@@ -35,13 +35,13 @@ function radiusForZoom(){ const z=MAP?MAP.getZoom():5; return z<=11?4 : (z<=13?6
 function focusNear(i){ const m=NEAR_MARKERS[i]; if(!m) return; MAP.setView(m.getLatLng(),16,{animate:true}); m.openPopup(); }
 window.focusNear=focusNear;
 const SIMPLE = !!window.SIMPLE; // 簡易版フラグ（simple.htmlで window.SIMPLE=true）
-const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', pcFilter:'', simpleG:new Set(['デリバリー','宅急便','未設定']) };
+const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', depotSet:null, pcFilter:'', simpleG:new Set(['デリバリー','宅急便','未設定']) };
 
 // デポ色分け用パレット（見分けやすい24色を循環）
 const PALETTE = ['#e6194B','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#800000','#aaffc3','#808000','#ffd8b1','#000075','#a9a9a9','#e6beff','#ff4500','#1e90ff','#228B22','#b03060','#00ced1'];
 let DEPOT_COLORS = {}, DEPOT_COUNTS = {};   // 担当デポ名 -> 色/件数
 let PC_COLORS = {}, PC_COUNTS = {};         // PC名 -> 色/件数
-let ROUTE_DAY=null, ROUTE_DEPOT='';         // デリバリー配送ルート（曜日→デポ）の選択状態（DS版のみ）
+let ROUTE_DAYS=new Set(), ROUTE_DEPOTS=new Set(), ROUTE_ACTIVE=false; // 配送ルート: 選択中の曜日/デポ(複数)・ルート表示中か（DS版のみ）
 
 // 併記(「/」)から実デポ/SDS名を1つ取り出す（宅急便/宅配/メーカー/冷凍を含む語は除外）
 function primaryDepot(p){
@@ -218,67 +218,76 @@ function buildFilters(){
   buildRouteUI();
 }
 
-// ===== デリバリー配送ルート（曜日→デポ）ドリルダウン（DS版のみ・#route-days が無ければ何もしない）=====
+// ===== デリバリー配送ルート（曜日・デポを複数ON/OFF）DS版のみ。#route-days が無ければ何もしない =====
 function buildRouteUI(){
   const box=document.getElementById('route-days'); if(!box) return;
   box.innerHTML='';
   DAYS.forEach(d=>{
-    const el=document.createElement('span'); el.className='chip'+(ROUTE_DAY===d?' on':''); el.dataset.day=d;
+    const el=document.createElement('span'); el.className='chip'+(ROUTE_DAYS.has(d)?' on':''); el.dataset.day=d;
     el.innerHTML='<span>'+d+'曜</span>';
-    el.onclick=()=>{ (ROUTE_DAY===d) ? routeReset() : routeSelectDay(d); };
+    el.onclick=()=>toggleRouteDay(d);
     box.appendChild(el);
   });
-  const allEl=document.createElement('span'); allEl.className='chip'+(ROUTE_DAY==='ALL'?' on':''); allEl.dataset.day='ALL';
+  const allOn=DAYS.every(d=>ROUTE_DAYS.has(d));
+  const allEl=document.createElement('span'); allEl.className='chip'+(allOn?' on':'');
   allEl.innerHTML='<span>全曜日</span>';
-  allEl.onclick=()=>{ (ROUTE_DAY==='ALL') ? routeReset() : routeSelectDay('ALL'); };
+  allEl.onclick=()=>{ if(allOn){ ROUTE_DAYS.clear(); } else { DAYS.forEach(d=>ROUTE_DAYS.add(d)); } onRouteDaysChanged(); };
   box.appendChild(allEl);
   renderRouteDepots();
 }
-function routeDepotCounts(day){
+function toggleRouteDay(d){ ROUTE_DAYS.has(d)?ROUTE_DAYS.delete(d):ROUTE_DAYS.add(d); onRouteDaysChanged(); }
+function onRouteDaysChanged(){
+  ROUTE_DEPOTS=new Set(routeDepotCounts().map(x=>x[0])); // 曜日変更時はデポを全チェックにリセット
+  buildRouteUI();
+  applyRoute(true);
+}
+function routeDepotCounts(){
+  if(!ROUTE_DAYS.size) return [];
   const m={};
-  ALL.forEach(p=>{ if(p.kubun!=='デリバリー') return; if(day!=='ALL' && !(p.days||[]).includes(day)) return; const d=primaryDepot(p); m[d]=(m[d]||0)+1; });
+  ALL.forEach(p=>{ if(p.kubun!=='デリバリー') return; if(!(p.days||[]).some(d=>ROUTE_DAYS.has(d))) return; const d=primaryDepot(p); m[d]=(m[d]||0)+1; });
   return Object.entries(m).sort((a,b)=>b[1]-a[1]);
 }
 function renderRouteDepots(){
   const wrap=document.getElementById('route-depots'); if(!wrap) return;
-  if(!ROUTE_DAY){ wrap.innerHTML='<div style="font-size:11px;color:#64748b;margin-top:6px;">曜日を選んでください。</div>'; return; }
-  const list=routeDepotCounts(ROUTE_DAY);
-  const total=list.reduce((s,x)=>s+x[1],0);
-  const dayLabel=(ROUTE_DAY==='ALL')?'全曜日':(ROUTE_DAY+'曜');
-  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 6px;"><span style="font-size:11px;color:#94a3b8;">${dayLabel}のデポ（${list.length}）</span><span onclick="routeReset()" style="font-size:11px;color:#7dd3fc;cursor:pointer;">× 解除</span></div>`;
-  html+=`<div class="routerow${ROUTE_DEPOT===''?' on':''}" data-depot=""><span>▼ すべてのデポ（色分け）</span><span class="cnt">${total}社</span></div>`;
+  if(!ROUTE_DAYS.size){ wrap.innerHTML='<div style="font-size:11px;color:#64748b;margin-top:6px;">曜日を選んでください（複数可）。</div>'; return; }
+  const list=routeDepotCounts();
+  const shownTotal=list.filter(([k])=>ROUTE_DEPOTS.has(k)).reduce((s,x)=>s+x[1],0);
+  const allChecked=list.length>0 && list.every(([k])=>ROUTE_DEPOTS.has(k));
+  const cb=(on)=>`<span class="cbx${on?' on':''}"></span>`;
+  let html=`<div class="route-head"><span>デポ ${list.length}／表示 ${shownTotal.toLocaleString()}社</span><span onclick="routeReset()" class="route-clear">× 解除</span></div>`;
+  html+=`<div class="routerow allrow" data-all="1">${cb(allChecked)}<span class="rname">${allChecked?'すべて外す':'すべて選択'}</span></div>`;
   html+=list.map(([k,v])=>{
     const c=DEPOT_COLORS[k]||'#a9a9a9';
-    const dot=`<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${c};border:1px solid rgba(255,255,255,.5);margin-right:7px;vertical-align:-1px;"></span>`;
-    return `<div class="routerow${ROUTE_DEPOT===k?' on':''}" data-depot="${esc(k).replace(/"/g,'&quot;')}"><span>${dot}${esc(k)}</span><span class="cnt">${v}</span></div>`;
+    const on=ROUTE_DEPOTS.has(k);
+    return `<div class="routerow${on?' on':''}" data-depot="${esc(k).replace(/"/g,'&quot;')}">${cb(on)}<span class="pindot" style="background:${c}"></span><span class="rname">${esc(k)}</span><span class="cnt">${v}</span></div>`;
   }).join('');
+  if(UNRESOLVED && UNRESOLVED.length){
+    html+=`<div style="font-size:10.5px;color:#fbbf24;margin-top:8px;line-height:1.5;">⚠️ 住所から座標を出せず地図に表示できない拠点が全体で ${UNRESOLVED.length} 件あります。</div>`;
+  }
   wrap.innerHTML=html;
-  wrap.querySelectorAll('.routerow').forEach(el=>el.onclick=()=>routeSelectDepot(el.getAttribute('data-depot')));
+  const allrow=wrap.querySelector('.allrow'); if(allrow) allrow.onclick=()=>routeAllDepots(!allChecked);
+  wrap.querySelectorAll('.routerow[data-depot]').forEach(el=>el.onclick=()=>toggleRouteDepot(el.getAttribute('data-depot')));
 }
-function routeSelectDay(day){
-  ROUTE_DAY=day; ROUTE_DEPOT='';
-  document.querySelectorAll('#route-days .chip').forEach(el=>el.classList.toggle('on', el.dataset.day===day));
-  state.kubun=new Set(['デリバリー']);
-  state.day = (day==='ALL') ? new Set([...DAYS,'なし']) : new Set([day]); // ALL=全曜日+曜日なしも表示
-  state.depotFilter=''; state.pcFilter='';
-  state.colorMode='depot';                       // 地図ピンをデポごとの色に切替
-  syncMainControls(); renderRouteDepots();
-  apply().then(fitToShown);
+function toggleRouteDepot(depot){ ROUTE_DEPOTS.has(depot)?ROUTE_DEPOTS.delete(depot):ROUTE_DEPOTS.add(depot); applyRoute(false); renderRouteDepots(); }
+function routeAllDepots(check){ ROUTE_DEPOTS = check?new Set(routeDepotCounts().map(x=>x[0])):new Set(); applyRoute(false); renderRouteDepots(); }
+function applyRoute(doFit){
+  if(!ROUTE_DAYS.size){ ROUTE_ACTIVE=false; routeResetFilters(); return; }
+  ROUTE_ACTIVE=true;
+  state.kubun=new Set(['デリバリー']); state.day=new Set([...ROUTE_DAYS]);
+  state.depotSet=new Set([...ROUTE_DEPOTS]);
+  state.depotFilter=''; state.pcFilter=''; state.colorMode='depot';
+  syncMainControls();
+  const pr=apply(); if(doFit && pr && pr.then) pr.then(fitToShown);
 }
-function routeSelectDepot(depot){
-  if(!ROUTE_DAY) return;
-  ROUTE_DEPOT=depot; state.depotFilter=depot;
-  syncMainControls(); renderRouteDepots();
-  apply().then(fitToShown);
-}
-function routeReset(){
-  ROUTE_DAY=null; ROUTE_DEPOT='';
-  document.querySelectorAll('#route-days .chip').forEach(el=>el.classList.remove('on'));
+function routeResetFilters(){
   state.kubun=new Set(ALL.map(p=>p.kubun)); state.day=new Set([...DAYS,'なし']);
   state.plan=new Set(ALL.flatMap(p=>p.plans||[])); // 相互排他で外れた「ごはん」等を全復帰
-  state.depotFilter=''; state.pcFilter=''; state.colorMode='kubun'; // 色分けを配送区分に戻す
-  syncMainControls(); renderRouteDepots();
-  apply();
+  state.depotSet=null; state.depotFilter=''; state.pcFilter=''; state.colorMode='kubun';
+  syncMainControls(); apply();
+}
+function routeReset(){
+  ROUTE_DAYS.clear(); ROUTE_DEPOTS.clear(); ROUTE_ACTIVE=false;
+  buildRouteUI(); routeResetFilters();
 }
 function syncMainControls(){
   document.querySelectorAll('#f-kubun .chip').forEach(el=>{ const t=el.textContent.trim(); el.classList.toggle('on', state.kubun.has(t)); });
@@ -322,7 +331,8 @@ function matchSimple(p){
 function match(p){
   if(SIMPLE) return matchSimple(p);
   if(!state.kubun.has(p.kubun)) return false;
-  if(state.depotFilter && primaryDepot(p)!==state.depotFilter) return false;
+  if(state.depotSet){ if(!state.depotSet.has(primaryDepot(p))) return false; }
+  else if(state.depotFilter && primaryDepot(p)!==state.depotFilter) return false;
   if(state.pcFilter && primaryPC(p)!==state.pcFilter) return false;
   if(state.pref && p.pref!==state.pref) return false;
   // プラン：点のプランのいずれかが選択されていればOK。プラン情報なしは常に表示。
@@ -364,8 +374,16 @@ async function apply(){
   if(state.kubun.has('解約') && !cxLoaded){ await loadCx(); }
   const shown = ALL.filter(match);
   const r=radiusForZoom();
+  const useTeardrop = ROUTE_ACTIVE && shown.length<=3000; // 配送ルート表示時はMyMaps風のしずく型ピン（件数が少ない時のみ）
   const mk=(p,lat,lng)=>{
-    const m=L.circleMarker([lat,lng],{radius:r,weight:1.2,color:'#ffffff',fillColor:colorOf(p),fillOpacity:0.95});
+    const c=colorOf(p);
+    let m;
+    if(useTeardrop){
+      const html=`<svg width="20" height="27" viewBox="0 0 24 32" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))"><path d="M12 0C5.37 0 0 5.37 0 12c0 8.4 12 20 12 20s12-11.6 12-20C24 5.37 18.63 0 12 0z" fill="${c}" stroke="#ffffff" stroke-width="1.6"/><circle cx="12" cy="12" r="4.2" fill="#ffffff" fill-opacity="0.6"/></svg>`;
+      m=L.marker([lat,lng],{icon:L.divIcon({className:'',html,iconSize:[20,27],iconAnchor:[10,27],popupAnchor:[0,-24]})});
+    } else {
+      m=L.circleMarker([lat,lng],{radius:r,weight:1.2,color:'#ffffff',fillColor:c,fillOpacity:0.95});
+    }
     m.bindPopup(function(){return popupHtml(p);},{maxWidth:320}); // 開いた時に距離を計算（実座標p基準）
     return m;
   };
