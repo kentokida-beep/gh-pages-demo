@@ -241,8 +241,12 @@ function renderRouteDepots(){
   const list=routeDepotCounts(ROUTE_DAY);
   const total=list.reduce((s,x)=>s+x[1],0);
   let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 6px;"><span style="font-size:11px;color:#94a3b8;">${ROUTE_DAY}曜のデポ（${list.length}）</span><span onclick="routeReset()" style="font-size:11px;color:#7dd3fc;cursor:pointer;">× 解除</span></div>`;
-  html+=`<div class="routerow${ROUTE_DEPOT===''?' on':''}" data-depot=""><span>▼ すべてのデポ</span><span class="cnt">${total}社</span></div>`;
-  html+=list.map(([k,v])=>`<div class="routerow${ROUTE_DEPOT===k?' on':''}" data-depot="${esc(k).replace(/"/g,'&quot;')}"><span>${esc(k)}</span><span class="cnt">${v}</span></div>`).join('');
+  html+=`<div class="routerow${ROUTE_DEPOT===''?' on':''}" data-depot=""><span>▼ すべてのデポ（色分け）</span><span class="cnt">${total}社</span></div>`;
+  html+=list.map(([k,v])=>{
+    const c=DEPOT_COLORS[k]||'#a9a9a9';
+    const dot=`<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${c};border:1px solid rgba(255,255,255,.5);margin-right:7px;vertical-align:-1px;"></span>`;
+    return `<div class="routerow${ROUTE_DEPOT===k?' on':''}" data-depot="${esc(k).replace(/"/g,'&quot;')}"><span>${dot}${esc(k)}</span><span class="cnt">${v}</span></div>`;
+  }).join('');
   wrap.innerHTML=html;
   wrap.querySelectorAll('.routerow').forEach(el=>el.onclick=()=>routeSelectDepot(el.getAttribute('data-depot')));
 }
@@ -250,6 +254,7 @@ function routeSelectDay(day){
   ROUTE_DAY=day; ROUTE_DEPOT='';
   document.querySelectorAll('#route-days .chip').forEach(el=>el.classList.toggle('on', el.dataset.day===day));
   state.kubun=new Set(['デリバリー']); state.day=new Set([day]); state.depotFilter=''; state.pcFilter='';
+  state.colorMode='depot';                       // 地図ピンをデポごとの色に切替
   syncMainControls(); renderRouteDepots();
   apply().then(fitToShown);
 }
@@ -264,7 +269,7 @@ function routeReset(){
   document.querySelectorAll('#route-days .chip').forEach(el=>el.classList.remove('on'));
   state.kubun=new Set(ALL.map(p=>p.kubun)); state.day=new Set([...DAYS,'なし']);
   state.plan=new Set(ALL.flatMap(p=>p.plans||[])); // 相互排他で外れた「ごはん」等を全復帰
-  state.depotFilter=''; state.pcFilter='';
+  state.depotFilter=''; state.pcFilter=''; state.colorMode='kubun'; // 色分けを配送区分に戻す
   syncMainControls(); renderRouteDepots();
   apply();
 }
@@ -272,6 +277,8 @@ function syncMainControls(){
   document.querySelectorAll('#f-kubun .chip').forEach(el=>{ const t=el.textContent.trim(); el.classList.toggle('on', state.kubun.has(t)); });
   document.querySelectorAll('#f-day .chip').forEach(el=>{ const t=el.textContent.trim(); el.classList.toggle('on', state.day.has(t)); });
   document.querySelectorAll('#f-plan .chip').forEach(el=>{ const t=el.textContent.trim(); el.classList.toggle('on', state.plan.has(t)); });
+  const cmMap={'配送区分':'kubun','担当デポ/SDS':'depot','発送元PC':'pc'};
+  document.querySelectorAll('#f-colormode .chip').forEach(el=>{ el.classList.toggle('on', cmMap[el.textContent.trim()]===state.colorMode); });
   const ds=document.getElementById('f-depotfilter'); if(ds) ds.value=state.depotFilter||'';
   const ps=document.getElementById('f-pcfilter'); if(ps) ps.value=state.pcFilter||'';
 }
