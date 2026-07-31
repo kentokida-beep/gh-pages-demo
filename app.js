@@ -228,11 +228,15 @@ function buildRouteUI(){
     el.onclick=()=>{ (ROUTE_DAY===d) ? routeReset() : routeSelectDay(d); };
     box.appendChild(el);
   });
+  const allEl=document.createElement('span'); allEl.className='chip'+(ROUTE_DAY==='ALL'?' on':''); allEl.dataset.day='ALL';
+  allEl.innerHTML='<span>全曜日</span>';
+  allEl.onclick=()=>{ (ROUTE_DAY==='ALL') ? routeReset() : routeSelectDay('ALL'); };
+  box.appendChild(allEl);
   renderRouteDepots();
 }
 function routeDepotCounts(day){
   const m={};
-  ALL.forEach(p=>{ if(p.kubun!=='デリバリー') return; if(!(p.days||[]).includes(day)) return; const d=primaryDepot(p); m[d]=(m[d]||0)+1; });
+  ALL.forEach(p=>{ if(p.kubun!=='デリバリー') return; if(day!=='ALL' && !(p.days||[]).includes(day)) return; const d=primaryDepot(p); m[d]=(m[d]||0)+1; });
   return Object.entries(m).sort((a,b)=>b[1]-a[1]);
 }
 function renderRouteDepots(){
@@ -240,7 +244,8 @@ function renderRouteDepots(){
   if(!ROUTE_DAY){ wrap.innerHTML='<div style="font-size:11px;color:#64748b;margin-top:6px;">曜日を選んでください。</div>'; return; }
   const list=routeDepotCounts(ROUTE_DAY);
   const total=list.reduce((s,x)=>s+x[1],0);
-  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 6px;"><span style="font-size:11px;color:#94a3b8;">${ROUTE_DAY}曜のデポ（${list.length}）</span><span onclick="routeReset()" style="font-size:11px;color:#7dd3fc;cursor:pointer;">× 解除</span></div>`;
+  const dayLabel=(ROUTE_DAY==='ALL')?'全曜日':(ROUTE_DAY+'曜');
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 6px;"><span style="font-size:11px;color:#94a3b8;">${dayLabel}のデポ（${list.length}）</span><span onclick="routeReset()" style="font-size:11px;color:#7dd3fc;cursor:pointer;">× 解除</span></div>`;
   html+=`<div class="routerow${ROUTE_DEPOT===''?' on':''}" data-depot=""><span>▼ すべてのデポ（色分け）</span><span class="cnt">${total}社</span></div>`;
   html+=list.map(([k,v])=>{
     const c=DEPOT_COLORS[k]||'#a9a9a9';
@@ -253,7 +258,9 @@ function renderRouteDepots(){
 function routeSelectDay(day){
   ROUTE_DAY=day; ROUTE_DEPOT='';
   document.querySelectorAll('#route-days .chip').forEach(el=>el.classList.toggle('on', el.dataset.day===day));
-  state.kubun=new Set(['デリバリー']); state.day=new Set([day]); state.depotFilter=''; state.pcFilter='';
+  state.kubun=new Set(['デリバリー']);
+  state.day = (day==='ALL') ? new Set([...DAYS,'なし']) : new Set([day]); // ALL=全曜日+曜日なしも表示
+  state.depotFilter=''; state.pcFilter='';
   state.colorMode='depot';                       // 地図ピンをデポごとの色に切替
   syncMainControls(); renderRouteDepots();
   apply().then(fitToShown);
