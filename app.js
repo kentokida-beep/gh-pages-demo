@@ -228,7 +228,7 @@ function buildRouteUI(){
     '<div class="route-head"><span>表示するレイヤーを選択</span><span onclick="routeReset()" class="route-clear">× 全解除</span></div>'
     +`<div class="chips"><span class="chip route-allchip${allActive?' on':''}" onclick="toggleRouteAll()"><span>ALL（デリバリー＋宅急便）</span></span></div>`
     +'<div class="route-sec">デリバリー（曜日）</div><div class="chips" id="rt-days"></div><div id="rt-depots"></div>'
-    +'<div class="route-sec">宅急便・冷凍（発送元PC）</div><div id="rt-pcs"></div>'
+    +'<div class="route-sec">宅急便・冷凍</div><div id="rt-pcs"></div>'
     +'<div class="route-sec">解約</div><div class="chips" id="rt-cx"></div>';
   renderDayChips(); renderDepotList(); renderPcList(); renderCxChip();
 }
@@ -261,15 +261,36 @@ function renderDepotList(){
 }
 function renderPcList(){
   const wrap=document.getElementById('rt-pcs'); if(!wrap) return;
-  const list=routePcCounts();
   const active=(ROUTE_MODE==='takkyu');
   const sel=active?ROUTE_PCS:new Set();
-  const shownTotal=list.filter(([k])=>sel.has(k)).reduce((s,x)=>s+x[1],0);
-  const r=routeRowsHtml(list, sel, PC_COLORS, 'data-pc');
-  const sub=active?`PC ${list.length}／表示 ${shownTotal.toLocaleString()}社`:`PC ${list.length}（PCを選ぶと宅急便を表示）`;
-  wrap.innerHTML=`<div class="route-sub">${sub}</div>`+r.html;
-  const allrow=wrap.querySelector('.allrow'); if(allrow) allrow.onclick=()=>routeAllPcs(!(active && r.allChecked));
+  const cb=(on)=>`<span class="cbx${on?' on':''}"></span>`;
+  const groups=[
+    {label:'宅急便（発送元PC）', list:routePcCounts(false), grp:'reg'},
+    {label:'冷凍（ごはんプラン）', list:routePcCounts(true),  grp:'frz'}
+  ];
+  let html=active?'':'<div class="route-sub" style="color:#64748b;">PCまたは冷凍を選ぶと宅急便を表示</div>';
+  groups.forEach(g=>{
+    if(!g.list.length) return;
+    const allChecked=g.list.every(([k])=>sel.has(k));
+    const shown=g.list.filter(([k])=>sel.has(k)).reduce((s,x)=>s+x[1],0);
+    html+=`<div class="route-sub" style="margin-top:8px;">${g.label} ${g.list.length}${active?'／表示 '+shown.toLocaleString()+'社':''}</div>`;
+    html+=`<div class="routerow allrow" data-allgrp="${g.grp}">${cb(allChecked)}<span class="rname">${allChecked?'すべて外す':'すべて選択'}</span></div>`;
+    html+=g.list.map(([k,v])=>{ const c=PC_COLORS[k]||'#a9a9a9'; const on=sel.has(k);
+      return `<div class="routerow${on?' on':''}" data-pc="${esc(k).replace(/"/g,'&quot;')}">${cb(on)}<span class="pindot" style="background:${c}"></span><span class="rname">${esc(k)}</span><span class="cnt">${v}</span></div>`;
+    }).join('');
+  });
+  wrap.innerHTML=html;
+  wrap.querySelectorAll('.allrow[data-allgrp]').forEach(el=>el.onclick=()=>{
+    const names=(el.getAttribute('data-allgrp')==='frz'?routePcCounts(true):routePcCounts(false)).map(x=>x[0]);
+    const cur=(ROUTE_MODE==='takkyu')?ROUTE_PCS:new Set();
+    routeAllPcsGroup(names, !(names.length && names.every(n=>cur.has(n))));
+  });
   wrap.querySelectorAll('.routerow[data-pc]').forEach(el=>el.onclick=()=>toggleRoutePc(el.getAttribute('data-pc')));
+}
+function routeAllPcsGroup(names, check){
+  if(ROUTE_MODE!=='takkyu'){ ROUTE_MODE='takkyu'; ROUTE_DAYS.clear(); ROUTE_PCS=new Set(); }
+  names.forEach(n=> check?ROUTE_PCS.add(n):ROUTE_PCS.delete(n));
+  buildRouteUI(); applyRoute(true);
 }
 function renderCxChip(){
   const box=document.getElementById('rt-cx'); if(!box) return; box.innerHTML='';
@@ -299,9 +320,14 @@ function routeDepotCounts(){
   ALL.forEach(p=>{ if(p.kubun!=='デリバリー') return; if(!(p.days||[]).some(d=>ROUTE_DAYS.has(d))) return; const d=primaryDepot(p); m[d]=(m[d]||0)+1; });
   return Object.entries(m).sort((a,b)=>b[1]-a[1]);
 }
-function routePcCounts(){
+function routePcCounts(frozen){ // frozen: true=冷凍(ごはん)のみ / false=通常宅急便のみ / undefined=両方
   const m={};
-  ALL.forEach(p=>{ if(p.kubun!=='宅急便' && p.kubun!=='宅急便(冷凍)') return; const pc=primaryPC(p); m[pc]=(m[pc]||0)+1; });
+  ALL.forEach(p=>{
+    if(frozen===true && p.kubun!=='宅急便(冷凍)') return;
+    if(frozen===false && p.kubun!=='宅急便') return;
+    if(frozen===undefined && p.kubun!=='宅急便' && p.kubun!=='宅急便(冷凍)') return;
+    const pc=primaryPC(p); m[pc]=(m[pc]||0)+1;
+  });
   return Object.entries(m).sort((a,b)=>b[1]-a[1]);
 }
 function routeRowsHtml(list, selected, colorMap, dataAttr){
