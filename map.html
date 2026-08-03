@@ -69,6 +69,8 @@
   .routerow .cbx.on::after{ content:''; position:absolute; left:3px; top:0; width:4px; height:8px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
   .chip.route-takchip{ margin-left:6px; border-color:#0d9488; }
   .chip.route-takchip.on{ background:#0d9488; border-color:#2dd4bf; color:#fff; }
+  .chip.route-cxchip{ border-color:#64748b; }
+  .chip.route-cxchip.on{ background:#64748b; border-color:#94a3b8; color:#fff; }
 </style>
 </head>
 <body>
@@ -134,14 +136,8 @@
       <div id="route-depots"></div>
     </div>
 
-    <details class="sec" open><summary>🔍 絞り込み・色分け（詳細）</summary>
+    <details class="sec" open><summary>🔍 絞り込み（詳細）</summary>
     <div class="group" style="margin-top:10px;">
-      <h2>ピンの色分け</h2>
-      <div class="chips" id="f-colormode"></div>
-      <div id="color-legend" style="display:none;max-height:220px;overflow:auto;margin-top:8px;font-size:11px;"></div>
-    </div>
-
-    <div class="group">
       <h2>担当デポ / SDS で絞り込み</h2>
       <select id="f-depotfilter"><option value="">すべて表示</option></select>
     </div>

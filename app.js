@@ -41,7 +41,7 @@ const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水',
 const PALETTE = ['#e6194B','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#800000','#aaffc3','#808000','#ffd8b1','#000075','#a9a9a9','#e6beff','#ff4500','#1e90ff','#228B22','#b03060','#00ced1'];
 let DEPOT_COLORS = {}, DEPOT_COUNTS = {};   // 担当デポ名 -> 色/件数
 let PC_COLORS = {}, PC_COUNTS = {};         // PC名 -> 色/件数
-let ROUTE_MODE='delivery', ROUTE_DAYS=new Set(), ROUTE_DEPOTS=new Set(), ROUTE_PCS=new Set(), ROUTE_ACTIVE=false; // 配送ルート: モード(delivery/takkyu)・曜日/デポ/PC(複数)・表示中か（DS版のみ）
+let ROUTE_MODE='delivery', ROUTE_DAYS=new Set(), ROUTE_DEPOTS=new Set(), ROUTE_PCS=new Set(), ROUTE_ACTIVE=false, ROUTE_CX=false; // 配送ルート: モード・曜日/デポ/PC(複数)・表示中か・解約も表示するか（DS版のみ）
 
 // 併記(「/」)から実デポ/SDS名を1つ取り出す（宅急便/宅配/メーカー/冷凍を含む語は除外）
 function primaryDepot(p){
@@ -93,6 +93,7 @@ function iconForColor(c){
   ICONS[c]=ic; return ic;
 }
 function colorOf(p){
+  if(p.kubun==='解約') return KUBUN_COLORS['解約']; // 解約は色分けモードに関わらずグレー
   if(state.colorMode==='depot') return DEPOT_COLORS[primaryDepot(p)]||'#a9a9a9';
   if(state.colorMode==='pc')    return PC_COLORS[primaryPC(p)]||'#a9a9a9';
   return KUBUN_COLORS[p.kubun]||'#f59e0b';
@@ -239,7 +240,17 @@ function buildRouteUI(){
   tak.innerHTML='<span>宅急便</span>';
   tak.onclick=()=>toggleTakkyu();
   box.appendChild(tak);
+  // 解約（グレー）表示トグル。モードに関わらず解約拠点を重ねて表示/非表示
+  const cx=document.createElement('span'); cx.className='chip route-cxchip'+(ROUTE_CX?' on':'');
+  cx.innerHTML='<span>解約</span>';
+  cx.onclick=()=>toggleRouteCx();
+  box.appendChild(cx);
   renderRouteDepots();
+}
+function toggleRouteCx(){
+  ROUTE_CX=!ROUTE_CX;
+  buildRouteUI();
+  if(ROUTE_ACTIVE) applyRoute(false); else routeResetFilters();
 }
 function toggleRouteDay(d){
   if(ROUTE_MODE!=='delivery'){ ROUTE_MODE='delivery'; ROUTE_DAYS=new Set(); }
@@ -311,7 +322,8 @@ function routeAllPcs(check){ ROUTE_PCS = check?new Set(routePcCounts().map(x=>x[
 function applyRoute(doFit){
   if(ROUTE_MODE==='takkyu'){
     ROUTE_ACTIVE=true;
-    state.kubun=new Set(['宅急便','宅急便(冷凍)']); state.day=new Set([...DAYS,'なし']); // 宅急便は曜日不問
+    state.kubun=new Set(['宅急便','宅急便(冷凍)']); if(ROUTE_CX) state.kubun.add('解約');
+    state.day=new Set([...DAYS,'なし']); // 宅急便は曜日不問
     state.plan=new Set(ALL.flatMap(p=>p.plans||[]));
     state.depotSet=null; state.pcSet=new Set([...ROUTE_PCS]);
     state.depotFilter=''; state.pcFilter=''; state.colorMode='pc';
@@ -321,20 +333,22 @@ function applyRoute(doFit){
   }
   if(!ROUTE_DAYS.size){ ROUTE_ACTIVE=false; routeResetFilters(); return; }
   ROUTE_ACTIVE=true;
-  state.kubun=new Set(['デリバリー']); state.day=new Set([...ROUTE_DAYS]);
+  state.kubun=new Set(['デリバリー']); if(ROUTE_CX) state.kubun.add('解約');
+  state.day=new Set([...ROUTE_DAYS]);
   state.depotSet=new Set([...ROUTE_DEPOTS]); state.pcSet=null;
   state.depotFilter=''; state.pcFilter=''; state.colorMode='depot';
   syncMainControls();
   const pr=apply(); if(doFit && pr && pr.then) pr.then(fitToShown);
 }
 function routeResetFilters(){
-  state.kubun=new Set(ALL.map(p=>p.kubun)); state.day=new Set([...DAYS,'なし']);
+  state.kubun=new Set(ALL.map(p=>p.kubun)); if(ROUTE_CX) state.kubun.add('解約');
+  state.day=new Set([...DAYS,'なし']);
   state.plan=new Set(ALL.flatMap(p=>p.plans||[])); // 相互排他で外れた「ごはん」等を全復帰
   state.depotSet=null; state.pcSet=null; state.depotFilter=''; state.pcFilter=''; state.colorMode='kubun';
   syncMainControls(); apply();
 }
 function routeReset(){
-  ROUTE_MODE='delivery'; ROUTE_DAYS.clear(); ROUTE_DEPOTS.clear(); ROUTE_PCS.clear(); ROUTE_ACTIVE=false;
+  ROUTE_MODE='delivery'; ROUTE_DAYS.clear(); ROUTE_DEPOTS.clear(); ROUTE_PCS.clear(); ROUTE_ACTIVE=false; ROUTE_CX=false;
   buildRouteUI(); routeResetFilters();
 }
 function syncMainControls(){
@@ -379,6 +393,11 @@ function matchSimple(p){
 function match(p){
   if(SIMPLE) return matchSimple(p);
   if(!state.kubun.has(p.kubun)) return false;
+  if(p.kubun==='解約'){ // 解約はデポ/PC/曜日/プランを持たない→区分ONなら表示（都道府県・キーワードのみ考慮）
+    if(state.pref && p.pref!==state.pref) return false;
+    if(state.kw){ const s=(p.name+' '+p.addr).toLowerCase(); if(s.indexOf(state.kw.toLowerCase())<0) return false; }
+    return true;
+  }
   if(state.depotSet){ if(!state.depotSet.has(primaryDepot(p))) return false; }
   else if(state.depotFilter && primaryDepot(p)!==state.depotFilter) return false;
   if(state.pcSet){ if(!state.pcSet.has(primaryPC(p))) return false; }
@@ -504,30 +523,30 @@ function fillSelect(id,keys,cnt,cur,onch){
   sel.value=cur; sel.onchange=()=>onch(sel.value);
 }
 function buildColorUI(){
-  // 色分けモード（簡易版など色分けUIが無い場合はスキップ）
-  const cm=document.getElementById('f-colormode'); if(!cm) return; cm.innerHTML='';
-  [['kubun','配送区分'],['depot','担当デポ/SDS'],['pc','発送元PC']].forEach(([v,label])=>{
-    const el=document.createElement('span'); el.className='chip'+(state.colorMode===v?' on':'');
-    el.textContent=label;
-    el.onclick=()=>{ state.colorMode=v; buildColorUI(); apply(); };
-    cm.appendChild(el);
-  });
-  // 集計・色割当（稼働のみ・件数降順）
+  // 集計・色割当（稼働のみ・件数降順）＝配送ルートのデポ/PC色分けでも使うので常に計算する
   const dp=tally(primaryDepot); DEPOT_COUNTS=dp.cnt; DEPOT_COLORS=dp.col;
   const pc=tally(primaryPC);    PC_COUNTS=pc.cnt;    PC_COLORS=pc.col;
-  // 絞り込みドロップダウン
+  // 以下の色分けモードUI・絞り込みDD・凡例は要素が有る時だけ（詳細から削除済みなら何もしない）
+  const cm=document.getElementById('f-colormode');
+  if(cm){ cm.innerHTML='';
+    [['kubun','配送区分'],['depot','担当デポ/SDS'],['pc','発送元PC']].forEach(([v,label])=>{
+      const el=document.createElement('span'); el.className='chip'+(state.colorMode===v?' on':'');
+      el.textContent=label;
+      el.onclick=()=>{ state.colorMode=v; buildColorUI(); apply(); };
+      cm.appendChild(el);
+    });
+  }
   fillSelect('f-depotfilter', dp.keys, dp.cnt, state.depotFilter, v=>{ state.depotFilter=v; apply(); });
   fillSelect('f-pcfilter',    pc.keys, pc.cnt, state.pcFilter,    v=>{ state.pcFilter=v;    apply(); });
-  // 凡例（色分けモードに応じてデポ or PC を表示、クリックで絞り込み）
   const lg=document.getElementById('color-legend');
-  if(state.colorMode==='depot'||state.colorMode==='pc'){
+  if(lg && (state.colorMode==='depot'||state.colorMode==='pc')){
     const t=(state.colorMode==='pc')?pc:dp, selId=(state.colorMode==='pc')?'f-pcfilter':'f-depotfilter';
     lg.innerHTML=t.keys.map(k=>`<div class="legrow" data-k="${k.replace(/"/g,'')}" style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;"><span style="width:12px;height:12px;border-radius:3px;background:${t.col[k]};flex:0 0 12px;"></span><span>${k}（${t.cnt[k]}）</span></div>`).join('');
     lg.querySelectorAll('.legrow').forEach(el=>el.onclick=()=>{ const k=el.getAttribute('data-k');
       if(state.colorMode==='pc'){ state.pcFilter=k; } else { state.depotFilter=k; }
-      document.getElementById(selId).value=k; apply(); });
+      const s=document.getElementById(selId); if(s) s.value=k; apply(); });
     lg.style.display='block';
-  } else { lg.style.display='none'; }
+  } else if(lg){ lg.style.display='none'; }
 }
 
 function popupHtml(p){
