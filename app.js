@@ -226,7 +226,7 @@ function buildRouteUI(){
   const allActive=(ROUTE_MODE==='all');
   panel.innerHTML=
     '<div class="route-head"><span>表示するレイヤーを選択</span><span onclick="routeReset()" class="route-clear">× 全解除</span></div>'
-    +`<div class="chips"><span class="chip route-allchip${allActive?' on':''}" onclick="toggleRouteAll()"><span>全部（デリバリー＋宅急便）</span></span></div>`
+    +`<div class="chips"><span class="chip route-allchip${allActive?' on':''}" onclick="toggleRouteAll()"><span>ALL（デリバリー＋宅急便）</span></span></div>`
     +'<div class="route-sec">デリバリー（曜日）</div><div class="chips" id="rt-days"></div><div id="rt-depots"></div>'
     +'<div class="route-sec">宅急便・冷凍（発送元PC）</div><div id="rt-pcs"></div>'
     +'<div class="route-sec">解約</div><div class="chips" id="rt-cx"></div>';
