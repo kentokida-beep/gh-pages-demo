@@ -35,13 +35,13 @@ function radiusForZoom(){ const z=MAP?MAP.getZoom():5; return z<=11?4 : (z<=13?6
 function focusNear(i){ const m=NEAR_MARKERS[i]; if(!m) return; MAP.setView(m.getLatLng(),16,{animate:true}); m.openPopup(); }
 window.focusNear=focusNear;
 const SIMPLE = !!window.SIMPLE; // 簡易版フラグ（simple.htmlで window.SIMPLE=true）
-const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', depotSet:null, pcFilter:'', simpleG:new Set(['デリバリー','宅急便','未設定']) };
+const state = { kubun:new Set(), plan:new Set(), day:new Set(['月','火','水','木','金','なし']), pref:'', kw:'', depotTypes:new Set(), colorMode:'kubun', depotFilter:'', depotSet:null, pcFilter:'', pcSet:null, simpleG:new Set(['デリバリー','宅急便','未設定']) };
 
 // デポ色分け用パレット（見分けやすい24色を循環）
 const PALETTE = ['#e6194B','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#800000','#aaffc3','#808000','#ffd8b1','#000075','#a9a9a9','#e6beff','#ff4500','#1e90ff','#228B22','#b03060','#00ced1'];
 let DEPOT_COLORS = {}, DEPOT_COUNTS = {};   // 担当デポ名 -> 色/件数
 let PC_COLORS = {}, PC_COUNTS = {};         // PC名 -> 色/件数
-let ROUTE_DAYS=new Set(), ROUTE_DEPOTS=new Set(), ROUTE_ACTIVE=false; // 配送ルート: 選択中の曜日/デポ(複数)・ルート表示中か（DS版のみ）
+let ROUTE_MODE='delivery', ROUTE_DAYS=new Set(), ROUTE_DEPOTS=new Set(), ROUTE_PCS=new Set(), ROUTE_ACTIVE=false; // 配送ルート: モード(delivery/takkyu)・曜日/デポ/PC(複数)・表示中か（DS版のみ）
 
 // 併記(「/」)から実デポ/SDS名を1つ取り出す（宅急便/宅配/メーカー/冷凍を含む語は除外）
 function primaryDepot(p){
@@ -218,26 +218,44 @@ function buildFilters(){
   buildRouteUI();
 }
 
-// ===== デリバリー配送ルート（曜日・デポを複数ON/OFF）DS版のみ。#route-days が無ければ何もしない =====
+// ===== 配送ルート（曜日=デリバリー / 宅急便=発送元PC を複数ON/OFF）DS版のみ。#route-days が無ければ何もしない =====
 function buildRouteUI(){
   const box=document.getElementById('route-days'); if(!box) return;
   box.innerHTML='';
   DAYS.forEach(d=>{
-    const el=document.createElement('span'); el.className='chip'+(ROUTE_DAYS.has(d)?' on':''); el.dataset.day=d;
+    const on=(ROUTE_MODE==='delivery' && ROUTE_DAYS.has(d));
+    const el=document.createElement('span'); el.className='chip'+(on?' on':''); el.dataset.day=d;
     el.innerHTML='<span>'+d+'曜</span>';
     el.onclick=()=>toggleRouteDay(d);
     box.appendChild(el);
   });
-  const allOn=DAYS.every(d=>ROUTE_DAYS.has(d));
+  const allOn=(ROUTE_MODE==='delivery' && DAYS.every(d=>ROUTE_DAYS.has(d)));
   const allEl=document.createElement('span'); allEl.className='chip'+(allOn?' on':'');
   allEl.innerHTML='<span>全曜日</span>';
-  allEl.onclick=()=>{ if(allOn){ ROUTE_DAYS.clear(); } else { DAYS.forEach(d=>ROUTE_DAYS.add(d)); } onRouteDaysChanged(); };
+  allEl.onclick=()=>{ ROUTE_MODE='delivery'; if(allOn){ ROUTE_DAYS.clear(); } else { ROUTE_DAYS=new Set(DAYS); } onRouteDaysChanged(); };
   box.appendChild(allEl);
+  // 宅急便（発送元PC別）モードへの切替チップ
+  const tak=document.createElement('span'); tak.className='chip route-takchip'+(ROUTE_MODE==='takkyu'?' on':'');
+  tak.innerHTML='<span>宅急便</span>';
+  tak.onclick=()=>toggleTakkyu();
+  box.appendChild(tak);
   renderRouteDepots();
 }
-function toggleRouteDay(d){ ROUTE_DAYS.has(d)?ROUTE_DAYS.delete(d):ROUTE_DAYS.add(d); onRouteDaysChanged(); }
+function toggleRouteDay(d){
+  if(ROUTE_MODE!=='delivery'){ ROUTE_MODE='delivery'; ROUTE_DAYS=new Set(); }
+  ROUTE_DAYS.has(d)?ROUTE_DAYS.delete(d):ROUTE_DAYS.add(d);
+  onRouteDaysChanged();
+}
 function onRouteDaysChanged(){
+  ROUTE_MODE='delivery';
   ROUTE_DEPOTS=new Set(routeDepotCounts().map(x=>x[0])); // 曜日変更時はデポを全チェックにリセット
+  buildRouteUI();
+  applyRoute(true);
+}
+function toggleTakkyu(){
+  if(ROUTE_MODE==='takkyu'){ routeReset(); return; } // 再クリックで解除
+  ROUTE_MODE='takkyu'; ROUTE_DAYS.clear();
+  ROUTE_PCS=new Set(routePcCounts().map(x=>x[0])); // 全PCをチェック
   buildRouteUI();
   applyRoute(true);
 }
@@ -247,34 +265,64 @@ function routeDepotCounts(){
   ALL.forEach(p=>{ if(p.kubun!=='デリバリー') return; if(!(p.days||[]).some(d=>ROUTE_DAYS.has(d))) return; const d=primaryDepot(p); m[d]=(m[d]||0)+1; });
   return Object.entries(m).sort((a,b)=>b[1]-a[1]);
 }
+function routePcCounts(){
+  const m={};
+  ALL.forEach(p=>{ if(p.kubun!=='宅急便' && p.kubun!=='宅急便(冷凍)') return; const pc=primaryPC(p); m[pc]=(m[pc]||0)+1; });
+  return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+}
+function routeRowsHtml(list, selected, colorMap, dataAttr){
+  const cb=(on)=>`<span class="cbx${on?' on':''}"></span>`;
+  const allChecked=list.length>0 && list.every(([k])=>selected.has(k));
+  let html=`<div class="routerow allrow" data-all="1">${cb(allChecked)}<span class="rname">${allChecked?'すべて外す':'すべて選択'}</span></div>`;
+  html+=list.map(([k,v])=>{
+    const c=colorMap[k]||'#a9a9a9';
+    const on=selected.has(k);
+    return `<div class="routerow${on?' on':''}" ${dataAttr}="${esc(k).replace(/"/g,'&quot;')}">${cb(on)}<span class="pindot" style="background:${c}"></span><span class="rname">${esc(k)}</span><span class="cnt">${v}</span></div>`;
+  }).join('');
+  return {html, allChecked};
+}
 function renderRouteDepots(){
   const wrap=document.getElementById('route-depots'); if(!wrap) return;
-  if(!ROUTE_DAYS.size){ wrap.innerHTML='<div style="font-size:11px;color:#64748b;margin-top:6px;">曜日を選んでください（複数可）。</div>'; return; }
+  if(ROUTE_MODE==='takkyu'){
+    const list=routePcCounts();
+    const shownTotal=list.filter(([k])=>ROUTE_PCS.has(k)).reduce((s,x)=>s+x[1],0);
+    const r=routeRowsHtml(list, ROUTE_PCS, PC_COLORS, 'data-pc');
+    let html=`<div class="route-head"><span>発送元PC ${list.length}／表示 ${shownTotal.toLocaleString()}社</span><span onclick="routeReset()" class="route-clear">× 解除</span></div>`+r.html;
+    if(UNRESOLVED && UNRESOLVED.length) html+=`<div style="font-size:10.5px;color:#fbbf24;margin-top:8px;line-height:1.5;">⚠️ 座標を出せず地図に表示できない拠点が全体で ${UNRESOLVED.length} 件あります。</div>`;
+    wrap.innerHTML=html;
+    const allrow=wrap.querySelector('.allrow'); if(allrow) allrow.onclick=()=>routeAllPcs(!r.allChecked);
+    wrap.querySelectorAll('.routerow[data-pc]').forEach(el=>el.onclick=()=>toggleRoutePc(el.getAttribute('data-pc')));
+    return;
+  }
+  if(!ROUTE_DAYS.size){ wrap.innerHTML='<div style="font-size:11px;color:#64748b;margin-top:6px;">曜日（複数可）または「宅急便」を選んでください。</div>'; return; }
   const list=routeDepotCounts();
   const shownTotal=list.filter(([k])=>ROUTE_DEPOTS.has(k)).reduce((s,x)=>s+x[1],0);
-  const allChecked=list.length>0 && list.every(([k])=>ROUTE_DEPOTS.has(k));
-  const cb=(on)=>`<span class="cbx${on?' on':''}"></span>`;
-  let html=`<div class="route-head"><span>デポ ${list.length}／表示 ${shownTotal.toLocaleString()}社</span><span onclick="routeReset()" class="route-clear">× 解除</span></div>`;
-  html+=`<div class="routerow allrow" data-all="1">${cb(allChecked)}<span class="rname">${allChecked?'すべて外す':'すべて選択'}</span></div>`;
-  html+=list.map(([k,v])=>{
-    const c=DEPOT_COLORS[k]||'#a9a9a9';
-    const on=ROUTE_DEPOTS.has(k);
-    return `<div class="routerow${on?' on':''}" data-depot="${esc(k).replace(/"/g,'&quot;')}">${cb(on)}<span class="pindot" style="background:${c}"></span><span class="rname">${esc(k)}</span><span class="cnt">${v}</span></div>`;
-  }).join('');
-  if(UNRESOLVED && UNRESOLVED.length){
-    html+=`<div style="font-size:10.5px;color:#fbbf24;margin-top:8px;line-height:1.5;">⚠️ 住所から座標を出せず地図に表示できない拠点が全体で ${UNRESOLVED.length} 件あります。</div>`;
-  }
+  const r=routeRowsHtml(list, ROUTE_DEPOTS, DEPOT_COLORS, 'data-depot');
+  let html=`<div class="route-head"><span>デポ ${list.length}／表示 ${shownTotal.toLocaleString()}社</span><span onclick="routeReset()" class="route-clear">× 解除</span></div>`+r.html;
+  if(UNRESOLVED && UNRESOLVED.length) html+=`<div style="font-size:10.5px;color:#fbbf24;margin-top:8px;line-height:1.5;">⚠️ 座標を出せず地図に表示できない拠点が全体で ${UNRESOLVED.length} 件あります。</div>`;
   wrap.innerHTML=html;
-  const allrow=wrap.querySelector('.allrow'); if(allrow) allrow.onclick=()=>routeAllDepots(!allChecked);
+  const allrow=wrap.querySelector('.allrow'); if(allrow) allrow.onclick=()=>routeAllDepots(!r.allChecked);
   wrap.querySelectorAll('.routerow[data-depot]').forEach(el=>el.onclick=()=>toggleRouteDepot(el.getAttribute('data-depot')));
 }
 function toggleRouteDepot(depot){ ROUTE_DEPOTS.has(depot)?ROUTE_DEPOTS.delete(depot):ROUTE_DEPOTS.add(depot); applyRoute(false); renderRouteDepots(); }
 function routeAllDepots(check){ ROUTE_DEPOTS = check?new Set(routeDepotCounts().map(x=>x[0])):new Set(); applyRoute(false); renderRouteDepots(); }
+function toggleRoutePc(pc){ ROUTE_PCS.has(pc)?ROUTE_PCS.delete(pc):ROUTE_PCS.add(pc); applyRoute(false); renderRouteDepots(); }
+function routeAllPcs(check){ ROUTE_PCS = check?new Set(routePcCounts().map(x=>x[0])):new Set(); applyRoute(false); renderRouteDepots(); }
 function applyRoute(doFit){
+  if(ROUTE_MODE==='takkyu'){
+    ROUTE_ACTIVE=true;
+    state.kubun=new Set(['宅急便','宅急便(冷凍)']); state.day=new Set([...DAYS,'なし']); // 宅急便は曜日不問
+    state.plan=new Set(ALL.flatMap(p=>p.plans||[]));
+    state.depotSet=null; state.pcSet=new Set([...ROUTE_PCS]);
+    state.depotFilter=''; state.pcFilter=''; state.colorMode='pc';
+    syncMainControls();
+    const pr=apply(); if(doFit && pr && pr.then) pr.then(fitToShown);
+    return;
+  }
   if(!ROUTE_DAYS.size){ ROUTE_ACTIVE=false; routeResetFilters(); return; }
   ROUTE_ACTIVE=true;
   state.kubun=new Set(['デリバリー']); state.day=new Set([...ROUTE_DAYS]);
-  state.depotSet=new Set([...ROUTE_DEPOTS]);
+  state.depotSet=new Set([...ROUTE_DEPOTS]); state.pcSet=null;
   state.depotFilter=''; state.pcFilter=''; state.colorMode='depot';
   syncMainControls();
   const pr=apply(); if(doFit && pr && pr.then) pr.then(fitToShown);
@@ -282,11 +330,11 @@ function applyRoute(doFit){
 function routeResetFilters(){
   state.kubun=new Set(ALL.map(p=>p.kubun)); state.day=new Set([...DAYS,'なし']);
   state.plan=new Set(ALL.flatMap(p=>p.plans||[])); // 相互排他で外れた「ごはん」等を全復帰
-  state.depotSet=null; state.depotFilter=''; state.pcFilter=''; state.colorMode='kubun';
+  state.depotSet=null; state.pcSet=null; state.depotFilter=''; state.pcFilter=''; state.colorMode='kubun';
   syncMainControls(); apply();
 }
 function routeReset(){
-  ROUTE_DAYS.clear(); ROUTE_DEPOTS.clear(); ROUTE_ACTIVE=false;
+  ROUTE_MODE='delivery'; ROUTE_DAYS.clear(); ROUTE_DEPOTS.clear(); ROUTE_PCS.clear(); ROUTE_ACTIVE=false;
   buildRouteUI(); routeResetFilters();
 }
 function syncMainControls(){
@@ -333,7 +381,8 @@ function match(p){
   if(!state.kubun.has(p.kubun)) return false;
   if(state.depotSet){ if(!state.depotSet.has(primaryDepot(p))) return false; }
   else if(state.depotFilter && primaryDepot(p)!==state.depotFilter) return false;
-  if(state.pcFilter && primaryPC(p)!==state.pcFilter) return false;
+  if(state.pcSet){ if(!state.pcSet.has(primaryPC(p))) return false; }
+  else if(state.pcFilter && primaryPC(p)!==state.pcFilter) return false;
   if(state.pref && p.pref!==state.pref) return false;
   // プラン：点のプランのいずれかが選択されていればOK。プラン情報なしは常に表示。
   if((p.plans||[]).length){
