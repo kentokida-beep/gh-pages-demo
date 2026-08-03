@@ -431,7 +431,7 @@ function matchSimple(p){
   if((p.plans||[]).length && !p.plans.some(pl=>state.plan.has(pl))) return false;
   // 曜日はデリバリーのみに適用（宅急便は曜日不問）
   if(g==='デリバリー'){ const days=p.days||[]; if(days.length && !days.some(d=>state.day.has(d))) return false; }
-  if(state.kw){ const s=(p.name+' '+p.addr).toLowerCase(); if(s.indexOf(state.kw.toLowerCase())<0) return false; }
+  if(state.kw){ const s=(p.name+' '+p.addr+' '+(p.pref||'')).toLowerCase(); if(s.indexOf(state.kw.toLowerCase())<0) return false; }
   return true;
 }
 function match(p){
@@ -439,7 +439,7 @@ function match(p){
   if(!state.kubun.has(p.kubun)) return false;
   if(p.kubun==='解約'){ // 解約はデポ/PC/曜日/プランを持たない→区分ONなら表示（都道府県・キーワードのみ考慮）
     if(state.pref && p.pref!==state.pref) return false;
-    if(state.kw){ const s=(p.name+' '+p.addr).toLowerCase(); if(s.indexOf(state.kw.toLowerCase())<0) return false; }
+    if(state.kw){ const s=(p.name+' '+p.addr+' '+(p.pref||'')).toLowerCase(); if(s.indexOf(state.kw.toLowerCase())<0) return false; }
     return true;
   }
   if(state.depotSet){ if(!state.depotSet.has(primaryDepot(p))) return false; }
@@ -456,7 +456,7 @@ function match(p){
   if(days.length){ if(!days.some(d=>state.day.has(d))) return false; }
   else{ if(!state.day.has('なし')) return false; }
   if(state.kw){
-    const s=(p.name+' '+p.addr).toLowerCase();
+    const s=(p.name+' '+p.addr+' '+(p.pref||'')).toLowerCase();
     if(s.indexOf(state.kw.toLowerCase())<0) return false;
   }
   return true;
@@ -842,7 +842,7 @@ window.clearNearest=clearNearest;
 function flyToKeyword(){
   if(!state.kw || !ALL.length) return;
   const m=ALL.filter(match);
-  if(!m.length || m.length>150) return;
+  if(!m.length) return; // 都道府県など件数が多くても、その範囲へfitBoundsで移動
   MAP.fitBounds(m.map(p=>[p.lat,p.lng]),{padding:[60,60],maxZoom:16});
 }
 window.flyToKeyword=flyToKeyword;
