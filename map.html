@@ -52,8 +52,10 @@
   table.ul{ width:100%; border-collapse:collapse; font-size:12px; }
   table.ul th{ text-align:left; background:#f1f5f9; padding:6px 8px; position:sticky; top:0; }
   table.ul td{ border-top:1px solid #eef2f7; padding:5px 8px; vertical-align:top; }
-  /* デリバリー配送ルート（曜日・デポを複数ON/OFF）*/
-  #route-depots{ max-height:340px; overflow:auto; margin-top:8px; }
+  /* 配送ルート（デリバリー/宅急便/解約 セクション）*/
+  .route-sec{ font-size:12px; font-weight:700; color:#cbd5e1; margin:12px 0 6px; padding-top:8px; border-top:1px solid #1e293b; }
+  .route-sub{ font-size:11px; color:#94a3b8; margin:4px 0 6px; }
+  #rt-depots, #rt-pcs{ max-height:260px; overflow:auto; }
   .route-head{ display:flex; justify-content:space-between; align-items:center; margin:6px 0; font-size:11px; color:#94a3b8; }
   .route-clear{ color:#7dd3fc; cursor:pointer; }
   .routerow{ display:flex; align-items:center; gap:7px; padding:6px 9px; border-radius:7px; cursor:pointer; border:1px solid #1e293b; margin-bottom:4px; background:#0f1e35; font-size:13px; }
@@ -130,10 +132,9 @@
     </div>
 
     <div class="group" id="route-box" style="background:#0b1a2e;border:1px solid #1e3a5f;border-radius:10px;padding:12px;">
-      <h2>🚚 配送ルート（曜日 / 宅急便）</h2>
-      <div style="font-size:11px;color:#94a3b8;margin:2px 0 8px;line-height:1.5;">曜日（複数可）を選ぶとデリバリーをデポ別色分けで、「宅急便」を選ぶと発送元PC別色分けで表示。一覧のチェックで表示ON/OFFできます。</div>
-      <div class="chips" id="route-days"></div>
-      <div id="route-depots"></div>
+      <h2>🚚 配送ルート</h2>
+      <div style="font-size:11px;color:#94a3b8;margin:2px 0 8px;line-height:1.5;">デリバリーは曜日→デポ別色分け、宅急便は発送元PC別色分けで表示。一覧のチェックで表示ON/OFF。解約は重ねて表示できます。</div>
+      <div id="route-panel"></div>
     </div>
 
     <details class="sec" open><summary>🔍 絞り込み（詳細）</summary>

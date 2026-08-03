@@ -219,54 +219,69 @@ function buildFilters(){
   buildRouteUI();
 }
 
-// ===== 配送ルート（曜日=デリバリー / 宅急便=発送元PC を複数ON/OFF）DS版のみ。#route-days が無ければ何もしない =====
+// ===== 配送ルート（デリバリー=曜日→デポ / 宅急便=発送元PC / 解約）DS版のみ。#route-panel が無ければ何もしない =====
 function buildRouteUI(){
-  const box=document.getElementById('route-days'); if(!box) return;
-  box.innerHTML='';
+  const panel=document.getElementById('route-panel'); if(!panel) return;
+  panel.innerHTML=
+    '<div class="route-head"><span>表示するレイヤーを選択</span><span onclick="routeReset()" class="route-clear">× 全解除</span></div>'
+    +'<div class="route-sec">デリバリー（曜日）</div><div class="chips" id="rt-days"></div><div id="rt-depots"></div>'
+    +'<div class="route-sec">宅急便（発送元PC）</div><div id="rt-pcs"></div>'
+    +'<div class="route-sec">解約</div><div class="chips" id="rt-cx"></div>';
+  renderDayChips(); renderDepotList(); renderPcList(); renderCxChip();
+}
+function renderDayChips(){
+  const box=document.getElementById('rt-days'); if(!box) return; box.innerHTML='';
   DAYS.forEach(d=>{
     const on=(ROUTE_MODE==='delivery' && ROUTE_DAYS.has(d));
-    const el=document.createElement('span'); el.className='chip'+(on?' on':''); el.dataset.day=d;
-    el.innerHTML='<span>'+d+'曜</span>';
-    el.onclick=()=>toggleRouteDay(d);
-    box.appendChild(el);
+    const el=document.createElement('span'); el.className='chip'+(on?' on':''); el.textContent=d;
+    el.onclick=()=>toggleRouteDay(d); box.appendChild(el);
   });
   const allOn=(ROUTE_MODE==='delivery' && DAYS.every(d=>ROUTE_DAYS.has(d)));
-  const allEl=document.createElement('span'); allEl.className='chip'+(allOn?' on':'');
-  allEl.innerHTML='<span>全曜日</span>';
+  const allEl=document.createElement('span'); allEl.className='chip'+(allOn?' on':''); allEl.textContent='ALL';
   allEl.onclick=()=>{ ROUTE_MODE='delivery'; if(allOn){ ROUTE_DAYS.clear(); } else { ROUTE_DAYS=new Set(DAYS); } onRouteDaysChanged(); };
   box.appendChild(allEl);
-  // 宅急便（発送元PC別）モードへの切替チップ
-  const tak=document.createElement('span'); tak.className='chip route-takchip'+(ROUTE_MODE==='takkyu'?' on':'');
-  tak.innerHTML='<span>宅急便</span>';
-  tak.onclick=()=>toggleTakkyu();
-  box.appendChild(tak);
-  // 解約（グレー）表示トグル。モードに関わらず解約拠点を重ねて表示/非表示
-  const cx=document.createElement('span'); cx.className='chip route-cxchip'+(ROUTE_CX?' on':'');
-  cx.innerHTML='<span>解約</span>';
-  cx.onclick=()=>toggleRouteCx();
-  box.appendChild(cx);
-  renderRouteDepots();
 }
+function renderDepotList(){
+  const wrap=document.getElementById('rt-depots'); if(!wrap) return;
+  if(ROUTE_MODE!=='delivery' || !ROUTE_DAYS.size){ wrap.innerHTML=''; return; }
+  const list=routeDepotCounts();
+  const shownTotal=list.filter(([k])=>ROUTE_DEPOTS.has(k)).reduce((s,x)=>s+x[1],0);
+  const r=routeRowsHtml(list, ROUTE_DEPOTS, DEPOT_COLORS, 'data-depot');
+  wrap.innerHTML=`<div class="route-sub">デポ ${list.length}／表示 ${shownTotal.toLocaleString()}社</div>`+r.html+cxNote();
+  const allrow=wrap.querySelector('.allrow'); if(allrow) allrow.onclick=()=>routeAllDepots(!r.allChecked);
+  wrap.querySelectorAll('.routerow[data-depot]').forEach(el=>el.onclick=()=>toggleRouteDepot(el.getAttribute('data-depot')));
+}
+function renderPcList(){
+  const wrap=document.getElementById('rt-pcs'); if(!wrap) return;
+  const list=routePcCounts();
+  const active=(ROUTE_MODE==='takkyu');
+  const sel=active?ROUTE_PCS:new Set();
+  const shownTotal=list.filter(([k])=>sel.has(k)).reduce((s,x)=>s+x[1],0);
+  const r=routeRowsHtml(list, sel, PC_COLORS, 'data-pc');
+  const sub=active?`PC ${list.length}／表示 ${shownTotal.toLocaleString()}社`:`PC ${list.length}（PCを選ぶと宅急便を表示）`;
+  wrap.innerHTML=`<div class="route-sub">${sub}</div>`+r.html;
+  const allrow=wrap.querySelector('.allrow'); if(allrow) allrow.onclick=()=>routeAllPcs(!(active && r.allChecked));
+  wrap.querySelectorAll('.routerow[data-pc]').forEach(el=>el.onclick=()=>toggleRoutePc(el.getAttribute('data-pc')));
+}
+function renderCxChip(){
+  const box=document.getElementById('rt-cx'); if(!box) return; box.innerHTML='';
+  const el=document.createElement('span'); el.className='chip route-cxchip'+(ROUTE_CX?' on':''); el.textContent=ROUTE_CX?'解約を表示中':'解約を表示';
+  el.onclick=()=>toggleRouteCx(); box.appendChild(el);
+}
+function cxNote(){ return (UNRESOLVED&&UNRESOLVED.length)?`<div style="font-size:10.5px;color:#fbbf24;margin-top:8px;line-height:1.5;">⚠️ 座標を出せず地図に表示できない拠点が全体で ${UNRESOLVED.length} 件あります。</div>`:''; }
 function toggleRouteCx(){
   ROUTE_CX=!ROUTE_CX;
-  buildRouteUI();
+  renderCxChip();
   if(ROUTE_ACTIVE) applyRoute(false); else routeResetFilters();
 }
 function toggleRouteDay(d){
-  if(ROUTE_MODE!=='delivery'){ ROUTE_MODE='delivery'; ROUTE_DAYS=new Set(); }
+  if(ROUTE_MODE!=='delivery'){ ROUTE_MODE='delivery'; ROUTE_DAYS=new Set(); ROUTE_PCS.clear(); }
   ROUTE_DAYS.has(d)?ROUTE_DAYS.delete(d):ROUTE_DAYS.add(d);
   onRouteDaysChanged();
 }
 function onRouteDaysChanged(){
   ROUTE_MODE='delivery';
   ROUTE_DEPOTS=new Set(routeDepotCounts().map(x=>x[0])); // 曜日変更時はデポを全チェックにリセット
-  buildRouteUI();
-  applyRoute(true);
-}
-function toggleTakkyu(){
-  if(ROUTE_MODE==='takkyu'){ routeReset(); return; } // 再クリックで解除
-  ROUTE_MODE='takkyu'; ROUTE_DAYS.clear();
-  ROUTE_PCS=new Set(routePcCounts().map(x=>x[0])); // 全PCをチェック
   buildRouteUI();
   applyRoute(true);
 }
@@ -292,33 +307,18 @@ function routeRowsHtml(list, selected, colorMap, dataAttr){
   }).join('');
   return {html, allChecked};
 }
-function renderRouteDepots(){
-  const wrap=document.getElementById('route-depots'); if(!wrap) return;
-  if(ROUTE_MODE==='takkyu'){
-    const list=routePcCounts();
-    const shownTotal=list.filter(([k])=>ROUTE_PCS.has(k)).reduce((s,x)=>s+x[1],0);
-    const r=routeRowsHtml(list, ROUTE_PCS, PC_COLORS, 'data-pc');
-    let html=`<div class="route-head"><span>発送元PC ${list.length}／表示 ${shownTotal.toLocaleString()}社</span><span onclick="routeReset()" class="route-clear">× 解除</span></div>`+r.html;
-    if(UNRESOLVED && UNRESOLVED.length) html+=`<div style="font-size:10.5px;color:#fbbf24;margin-top:8px;line-height:1.5;">⚠️ 座標を出せず地図に表示できない拠点が全体で ${UNRESOLVED.length} 件あります。</div>`;
-    wrap.innerHTML=html;
-    const allrow=wrap.querySelector('.allrow'); if(allrow) allrow.onclick=()=>routeAllPcs(!r.allChecked);
-    wrap.querySelectorAll('.routerow[data-pc]').forEach(el=>el.onclick=()=>toggleRoutePc(el.getAttribute('data-pc')));
-    return;
-  }
-  if(!ROUTE_DAYS.size){ wrap.innerHTML='<div style="font-size:11px;color:#64748b;margin-top:6px;">曜日（複数可）または「宅急便」を選んでください。</div>'; return; }
-  const list=routeDepotCounts();
-  const shownTotal=list.filter(([k])=>ROUTE_DEPOTS.has(k)).reduce((s,x)=>s+x[1],0);
-  const r=routeRowsHtml(list, ROUTE_DEPOTS, DEPOT_COLORS, 'data-depot');
-  let html=`<div class="route-head"><span>デポ ${list.length}／表示 ${shownTotal.toLocaleString()}社</span><span onclick="routeReset()" class="route-clear">× 解除</span></div>`+r.html;
-  if(UNRESOLVED && UNRESOLVED.length) html+=`<div style="font-size:10.5px;color:#fbbf24;margin-top:8px;line-height:1.5;">⚠️ 座標を出せず地図に表示できない拠点が全体で ${UNRESOLVED.length} 件あります。</div>`;
-  wrap.innerHTML=html;
-  const allrow=wrap.querySelector('.allrow'); if(allrow) allrow.onclick=()=>routeAllDepots(!r.allChecked);
-  wrap.querySelectorAll('.routerow[data-depot]').forEach(el=>el.onclick=()=>toggleRouteDepot(el.getAttribute('data-depot')));
+function toggleRouteDepot(depot){ ROUTE_DEPOTS.has(depot)?ROUTE_DEPOTS.delete(depot):ROUTE_DEPOTS.add(depot); applyRoute(false); renderDepotList(); }
+function routeAllDepots(check){ ROUTE_DEPOTS = check?new Set(routeDepotCounts().map(x=>x[0])):new Set(); applyRoute(false); renderDepotList(); }
+function toggleRoutePc(pc){
+  if(ROUTE_MODE!=='takkyu'){ ROUTE_MODE='takkyu'; ROUTE_DAYS.clear(); ROUTE_PCS=new Set(); }
+  ROUTE_PCS.has(pc)?ROUTE_PCS.delete(pc):ROUTE_PCS.add(pc);
+  buildRouteUI(); applyRoute(true);
 }
-function toggleRouteDepot(depot){ ROUTE_DEPOTS.has(depot)?ROUTE_DEPOTS.delete(depot):ROUTE_DEPOTS.add(depot); applyRoute(false); renderRouteDepots(); }
-function routeAllDepots(check){ ROUTE_DEPOTS = check?new Set(routeDepotCounts().map(x=>x[0])):new Set(); applyRoute(false); renderRouteDepots(); }
-function toggleRoutePc(pc){ ROUTE_PCS.has(pc)?ROUTE_PCS.delete(pc):ROUTE_PCS.add(pc); applyRoute(false); renderRouteDepots(); }
-function routeAllPcs(check){ ROUTE_PCS = check?new Set(routePcCounts().map(x=>x[0])):new Set(); applyRoute(false); renderRouteDepots(); }
+function routeAllPcs(check){
+  ROUTE_MODE='takkyu'; ROUTE_DAYS.clear();
+  ROUTE_PCS = check?new Set(routePcCounts().map(x=>x[0])):new Set();
+  buildRouteUI(); applyRoute(true);
+}
 function applyRoute(doFit){
   if(ROUTE_MODE==='takkyu'){
     ROUTE_ACTIVE=true;
