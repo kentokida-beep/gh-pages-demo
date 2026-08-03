@@ -73,6 +73,8 @@
   .chip.route-takchip.on{ background:#0d9488; border-color:#2dd4bf; color:#fff; }
   .chip.route-cxchip{ border-color:#64748b; }
   .chip.route-cxchip.on{ background:#64748b; border-color:#94a3b8; color:#fff; }
+  .chip.route-allchip{ border-color:#6d28d9; }
+  .chip.route-allchip.on{ background:#6d28d9; border-color:#a78bfa; color:#fff; }
 </style>
 </head>
 <body>
@@ -139,28 +141,8 @@
 
     <details class="sec" open><summary>🔍 絞り込み（詳細）</summary>
     <div class="group" style="margin-top:10px;">
-      <h2>担当デポ / SDS で絞り込み</h2>
-      <select id="f-depotfilter"><option value="">すべて表示</option></select>
-    </div>
-
-    <div class="group">
-      <h2>発送元PC で絞り込み</h2>
-      <select id="f-pcfilter"><option value="">すべて表示</option></select>
-    </div>
-
-    <div class="group">
-      <h2>配送区分</h2>
-      <div class="chips" id="f-kubun"></div>
-    </div>
-
-    <div class="group">
-      <h2>プラン</h2>
+      <h2>プラン（ごはん / やさい）</h2>
       <div class="chips" id="f-plan"></div>
-    </div>
-
-    <div class="group">
-      <h2>配達曜日（デリバリー）</h2>
-      <div class="chips" id="f-day"></div>
     </div>
 
     <div class="group">
