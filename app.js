@@ -274,7 +274,7 @@ function renderPcList(){
     const allChecked=g.list.every(([k])=>sel.has(k));
     const shown=g.list.filter(([k])=>sel.has(k)).reduce((s,x)=>s+x[1],0);
     html+=`<div class="route-sub" style="margin-top:8px;">${g.label} ${g.list.length}${active?'／表示 '+shown.toLocaleString()+'社':''}</div>`;
-    html+=`<div class="routerow allrow" data-allgrp="${g.grp}">${cb(allChecked)}<span class="rname">${allChecked?'すべて外す':'すべて選択'}</span></div>`;
+    if(g.grp!=='frz') html+=`<div class="routerow allrow" data-allgrp="${g.grp}">${cb(allChecked)}<span class="rname">${allChecked?'すべて外す':'すべて選択'}</span></div>`;
     html+=g.list.map(([k,v])=>{ const c=PC_COLORS[k]||'#a9a9a9'; const on=sel.has(k);
       return `<div class="routerow${on?' on':''}" data-pc="${esc(k).replace(/"/g,'&quot;')}">${cb(on)}<span class="pindot" style="background:${c}"></span><span class="rname">${esc(k)}</span><span class="cnt">${v}</span></div>`;
     }).join('');
