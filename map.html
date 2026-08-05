@@ -10,37 +10,38 @@
   *{ margin:0; padding:0; box-sizing:border-box; }
   html,body{ height:100%; font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif; }
   #app{ display:flex; height:100%; }
-  #sidebar{ width:300px; flex:0 0 300px; background:#0f172a; color:#e2e8f0; padding:16px; overflow-y:auto; }
+  #sidebar{ width:320px; flex:0 0 320px; background:#eef2f6; color:#1e293b; padding:14px; overflow-y:auto; }
   #map{ flex:1; }
-  h1{ font-size:16px; font-weight:800; margin-bottom:4px; }
-  .sub{ font-size:11px; color:#94a3b8; margin-bottom:14px; line-height:1.5; }
-  .group{ margin-bottom:16px; }
-  .group h2{ font-size:12px; font-weight:700; color:#cbd5e1; margin-bottom:8px; letter-spacing:.03em; }
+  h1{ font-size:16px; font-weight:800; margin-bottom:2px; color:#0f172a; }
+  .sub{ font-size:11px; color:#64748b; margin-bottom:12px; line-height:1.5; }
+  /* 各題目を白カードで囲む */
+  .group{ background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-bottom:12px; box-shadow:0 1px 2px rgba(15,23,42,.05); }
+  .group h2{ font-size:13px; font-weight:800; color:#1d4ed8; margin-bottom:9px; letter-spacing:.02em; padding-left:8px; border-left:3px solid #1d4ed8; }
   .chips{ display:flex; flex-wrap:wrap; gap:6px; }
-  .chip{ display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:5px 9px; border-radius:999px;
-         background:#1e293b; border:1px solid #334155; cursor:pointer; user-select:none; }
-  .chip.on{ background:#1d4ed8; border-color:#3b82f6; color:#fff; }
+  .chip{ display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:5px 10px; border-radius:999px;
+         background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; cursor:pointer; user-select:none; }
+  .chip.on{ background:#1d4ed8; border-color:#1d4ed8; color:#fff; }
   .chip .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
-  select,input[type=text]{ width:100%; padding:8px; border-radius:8px; border:1px solid #334155; background:#1e293b; color:#e2e8f0; font-size:13px; }
-  .count{ font-size:12px; color:#94a3b8; margin-top:6px; }
-  .foot{ font-size:10px; color:#64748b; margin-top:18px; line-height:1.6; border-top:1px solid #1e293b; padding-top:10px; }
+  select,input[type=text]{ width:100%; padding:9px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; color:#1e293b; font-size:13px; }
+  input[type=text]::placeholder{ color:#94a3b8; }
+  .count{ font-size:12px; color:#64748b; margin-top:2px; }
+  .foot{ font-size:10px; color:#64748b; margin-top:8px; line-height:1.6; }
   .marker-dot{ border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.4); }
   .lp b{ font-size:14px; }
   .lp table{ margin-top:6px; font-size:12px; border-collapse:collapse; }
   .lp td{ padding:2px 6px 2px 0; vertical-align:top; }
   .lp td.k{ color:#64748b; white-space:nowrap; }
-  #pw-overlay{ position:fixed; inset:0; background:#0f172a; z-index:9999; display:flex; align-items:center; justify-content:center; }
+  #pw-overlay{ position:fixed; inset:0; background:#eef2f6; z-index:9999; display:flex; align-items:center; justify-content:center; }
   #pw-overlay .box{ background:#fff; color:#0f172a; border-radius:16px; padding:36px; text-align:center; width:320px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
   #pw-overlay input{ width:100%; padding:10px 14px; border:2px solid #e2e8f0; border-radius:8px; font-size:16px; text-align:center; outline:none; margin-bottom:12px; color:#0f172a; background:#fff; }
   #pw-overlay button{ width:100%; border:none; border-radius:8px; padding:10px; font-size:14px; font-weight:700; background:#1d4ed8; color:#fff; cursor:pointer; }
   #loading{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:800; background:#fff; color:#0f172a; padding:14px 20px; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,.2); font-size:13px; }
-  details.sec{ border-top:1px solid #1e293b; margin-top:14px; }
-  details.sec>summary{ cursor:pointer; list-style:none; padding:12px 0 4px; font-weight:700; font-size:13px; color:#cbd5e1; user-select:none; }
+  details.sec{ margin-top:0; }
+  details.sec>summary{ cursor:pointer; list-style:none; padding:2px 0 8px; font-weight:800; font-size:13px; color:#0f172a; user-select:none; }
   details.sec>summary::-webkit-details-marker{ display:none; }
-  details.sec>summary::before{ content:"▸"; color:#64748b; margin-right:7px; display:inline-block; }
+  details.sec>summary::before{ content:"▸"; color:#94a3b8; margin-right:7px; display:inline-block; }
   details.sec[open]>summary::before{ content:"▾"; }
-  /* 地図タイルを淡く＝地名などを目立たせず、色付きピンを際立たせる */
-  .leaflet-tile-pane{ filter:grayscale(1) brightness(1.16) contrast(0.82) opacity(0.68); } /* 色を抜き、記号・地名を極力薄く（無地寄り） */
+  .leaflet-tile-pane{ filter:grayscale(1) brightness(1.05) contrast(0.9) opacity(0.9); }
   #admin-sec{ display:none; } /* CSV更新は管理者がコマンドで実施（アプリ内アップロードは非表示） */
   @media(max-width:640px){ #app{ flex-direction:column; } #sidebar{ width:100%; flex:0 0 auto; max-height:42%; } }
   #unres-modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; display:none; align-items:center; justify-content:center; }
@@ -52,29 +53,30 @@
   table.ul{ width:100%; border-collapse:collapse; font-size:12px; }
   table.ul th{ text-align:left; background:#f1f5f9; padding:6px 8px; position:sticky; top:0; }
   table.ul td{ border-top:1px solid #eef2f7; padding:5px 8px; vertical-align:top; }
-  /* 配送ルート（デリバリー/宅急便/解約 セクション）*/
-  .route-sec{ font-size:12px; font-weight:700; color:#cbd5e1; margin:12px 0 6px; padding-top:8px; border-top:1px solid #1e293b; }
-  .route-sub{ font-size:11px; color:#94a3b8; margin:4px 0 6px; }
+  /* 配送ルート: 各セクションを白カードで囲む */
+  #route-box>h2{ font-size:14px; font-weight:800; color:#0f172a; margin:2px 0 4px; }
+  .route-card{ background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:10px 12px; margin-bottom:10px; box-shadow:0 1px 2px rgba(15,23,42,.05); }
+  .route-card .route-title{ font-size:13px; font-weight:800; color:#1d4ed8; margin-bottom:8px; padding-left:8px; border-left:3px solid #1d4ed8; }
+  .route-sub{ font-size:11px; color:#64748b; margin:4px 0 6px; }
   #rt-depots, #rt-pcs{ max-height:260px; overflow:auto; }
-  .route-head{ display:flex; justify-content:space-between; align-items:center; margin:6px 0; font-size:11px; color:#94a3b8; }
-  .route-clear{ color:#7dd3fc; cursor:pointer; }
-  .routerow{ display:flex; align-items:center; gap:7px; padding:6px 9px; border-radius:7px; cursor:pointer; border:1px solid #1e293b; margin-bottom:4px; background:#0f1e35; font-size:13px; }
-  .routerow:hover{ background:#14284a; }
-  .routerow.on{ background:#122443; }
-  .routerow.allrow{ background:#0b1626; font-weight:600; }
+  .route-head{ display:flex; justify-content:space-between; align-items:center; margin:0 0 8px; font-size:11px; color:#64748b; }
+  .route-clear{ color:#1d4ed8; cursor:pointer; font-weight:700; }
+  .routerow{ display:flex; align-items:center; gap:7px; padding:6px 9px; border-radius:7px; cursor:pointer; border:1px solid #e2e8f0; margin-bottom:4px; background:#fff; font-size:13px; color:#1e293b; }
+  .routerow:hover{ background:#f8fafc; }
+  .routerow.on{ background:#eff4ff; border-color:#bfdbfe; }
+  .routerow.allrow{ background:#f8fafc; font-weight:700; }
   .routerow .rname{ flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .routerow .cnt{ color:#94a3b8; flex:0 0 auto; }
-  .routerow.on .cnt{ color:#dbeafe; }
-  .routerow .pindot{ display:inline-block; width:11px; height:11px; border-radius:50%; border:1px solid rgba(255,255,255,.5); flex:0 0 auto; }
-  .routerow .cbx{ display:inline-block; width:15px; height:15px; border-radius:4px; border:2px solid #475569; flex:0 0 auto; position:relative; box-sizing:border-box; }
-  .routerow .cbx.on{ background:#2563eb; border-color:#3b82f6; }
+  .routerow .cnt{ color:#64748b; flex:0 0 auto; }
+  .routerow .pindot{ display:inline-block; width:11px; height:11px; border-radius:50%; border:1px solid rgba(0,0,0,.2); flex:0 0 auto; }
+  .routerow .cbx{ display:inline-block; width:15px; height:15px; border-radius:4px; border:2px solid #94a3b8; flex:0 0 auto; position:relative; box-sizing:border-box; }
+  .routerow .cbx.on{ background:#2563eb; border-color:#2563eb; }
   .routerow .cbx.on::after{ content:''; position:absolute; left:3px; top:0; width:4px; height:8px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
-  .chip.route-takchip{ margin-left:6px; border-color:#0d9488; }
-  .chip.route-takchip.on{ background:#0d9488; border-color:#2dd4bf; color:#fff; }
-  .chip.route-cxchip{ border-color:#64748b; }
-  .chip.route-cxchip.on{ background:#64748b; border-color:#94a3b8; color:#fff; }
-  .chip.route-allchip{ border-color:#6d28d9; }
-  .chip.route-allchip.on{ background:#6d28d9; border-color:#a78bfa; color:#fff; }
+  .chip.route-takchip{ border-color:#0d9488; color:#0f766e; }
+  .chip.route-takchip.on{ background:#0d9488; border-color:#0d9488; color:#fff; }
+  .chip.route-cxchip{ border-color:#94a3b8; color:#475569; }
+  .chip.route-cxchip.on{ background:#64748b; border-color:#64748b; color:#fff; }
+  .chip.route-allchip{ border-color:#6d28d9; color:#6d28d9; width:100%; justify-content:center; font-weight:700; padding:9px; }
+  .chip.route-allchip.on{ background:#6d28d9; border-color:#6d28d9; color:#fff; }
 </style>
 </head>
 <body>
@@ -125,17 +127,17 @@
       <input type="text" id="kw" placeholder="例：東京都 / 渋谷 / 医療法人…">
     </div>
 
-    <div class="group" style="background:#111c33;border:1px solid #1e3a5f;border-radius:10px;padding:12px;">
+    <div class="group">
       <h2>📍 住所から最寄り契約企業</h2>
-      <div style="font-size:11px;color:#94a3b8;margin:2px 0 8px;line-height:1.5;">住所を入れると、最寄りの契約企業・直線距離・配達曜日・配送方法を表示します。</div>
+      <div style="font-size:11px;color:#64748b;margin:2px 0 8px;line-height:1.5;">住所を入れると、最寄りの契約企業・直線距離・配達曜日・配送方法を表示します。</div>
       <input type="text" id="nearAddr" placeholder="例：渋谷区道玄坂1-2-3" onkeypress="if(event.key==='Enter')findNearest()">
       <button id="nearBtn" style="margin-top:8px;width:100%;padding:8px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-weight:700;cursor:pointer;">最寄りを検索</button>
       <div id="near-result" style="margin-top:10px;font-size:12px;"></div>
     </div>
 
-    <div class="group" id="route-box" style="background:#0b1a2e;border:1px solid #1e3a5f;border-radius:10px;padding:12px;">
+    <div id="route-box" style="margin-bottom:12px;">
       <h2>🚚 配送ルート</h2>
-      <div style="font-size:11px;color:#94a3b8;margin:2px 0 8px;line-height:1.5;">デリバリーは曜日→デポ別色分け、宅急便は発送元PC別色分けで表示。一覧のチェックで表示ON/OFF。解約は重ねて表示できます。</div>
+      <div style="font-size:11px;color:#64748b;margin:2px 0 8px;line-height:1.5;">デリバリーは曜日→デポ別色分け、宅急便は発送元PC別色分けで表示。一覧のチェックで表示ON/OFF。解約は重ねて表示できます。</div>
       <div id="route-panel"></div>
     </div>
 

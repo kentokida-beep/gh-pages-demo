@@ -226,10 +226,10 @@ function buildRouteUI(){
   const allActive=(ROUTE_MODE==='all');
   panel.innerHTML=
     '<div class="route-head"><span>表示するレイヤーを選択</span><span onclick="routeReset()" class="route-clear">× 全解除</span></div>'
-    +`<div class="chips"><span class="chip route-allchip${allActive?' on':''}" onclick="toggleRouteAll()"><span>ALL（デリバリー＋宅急便）</span></span></div>`
-    +'<div class="route-sec">デリバリー（曜日）</div><div class="chips" id="rt-days"></div><div id="rt-depots"></div>'
-    +'<div class="route-sec">宅急便・冷凍</div><div id="rt-pcs"></div>'
-    +'<div class="route-sec">解約</div><div class="chips" id="rt-cx"></div>';
+    +`<div class="route-card"><div class="chips"><span class="chip route-allchip${allActive?' on':''}" onclick="toggleRouteAll()"><span>ALL（デリバリー＋宅急便）</span></span></div></div>`
+    +'<div class="route-card"><div class="route-title">デリバリー（曜日）</div><div class="chips" id="rt-days"></div><div id="rt-depots"></div></div>'
+    +'<div class="route-card"><div class="route-title">宅急便・冷凍</div><div id="rt-pcs"></div></div>'
+    +'<div class="route-card"><div class="route-title">解約</div><div class="chips" id="rt-cx"></div></div>';
   renderDayChips(); renderDepotList(); renderPcList(); renderCxChip();
 }
 function toggleRouteAll(){
@@ -814,16 +814,16 @@ async function findNearest(){
   MAP.fitBounds(bounds,{padding:[70,70],maxZoom:16});
   if(NEAR_MARKERS[0]) NEAR_MARKERS[0].openPopup(); // 最寄り1社の距離ポップアップを自動表示
   // 結果カード（近い順・番号なし）＋ ✕クリア
-  box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="color:#94a3b8;font-size:11px;">最寄り3件（近い順）</span><button onclick="clearNearest()" style="border:none;background:#334155;color:#e2e8f0;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;">✕ クリア</button></div>'+top.map((s,i)=>{
+  box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="color:#64748b;font-size:11px;">最寄り3件（近い順）</span><button onclick="clearNearest()" style="border:1px solid #cbd5e1;background:#f1f5f9;color:#334155;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;">✕ クリア</button></div>'+top.map((s,i)=>{
     const p=s.p, c=KUBUN_COLORS[p.kubun]||'#f59e0b';
     const days=(p.days||[]).length ? (p.days.join('・')+'曜') : '曜日指定なし';
     const detail=[p.depot,p.pc].filter(Boolean).join(' ／ ');
-    return `<div onclick="focusNear(${i})" title="クリックで地図で表示" style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;">
-      <div style="font-weight:700;">${esc(p.name)} <span style="color:#94a3b8;font-weight:400;">${esc(p.floor||'')}</span></div>
-      <div style="color:#e2e8f0;margin-top:2px;">検索地点から <b>直線 ${s.d.toFixed(s.d<10?1:0)} km</b></div>
-      <div style="margin-top:3px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px;vertical-align:-1px;"></span>${esc(p.kubun)} ／ ${days}</div>
-      ${detail?`<div style="color:#94a3b8;margin-top:2px;">${esc(detail)}</div>`:''}
-      <div style="text-align:right;color:#5eead4;font-size:11px;margin-top:3px;">地図で表示 ›</div>
+    return `<div onclick="focusNear(${i})" title="クリックで地図で表示" style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;">
+      <div style="font-weight:700;color:#1e293b;">${esc(p.name)} <span style="color:#64748b;font-weight:400;">${esc(p.floor||'')}</span></div>
+      <div style="color:#1e293b;margin-top:2px;">検索地点から <b>直線 ${s.d.toFixed(s.d<10?1:0)} km</b></div>
+      <div style="margin-top:3px;color:#334155;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px;vertical-align:-1px;"></span>${esc(p.kubun)} ／ ${days}</div>
+      ${detail?`<div style="color:#64748b;margin-top:2px;">${esc(detail)}</div>`:''}
+      <div style="text-align:right;color:#0d9488;font-size:11px;margin-top:3px;">地図で表示 ›</div>
     </div>`;
   }).join('');
 }
