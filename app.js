@@ -72,9 +72,11 @@ function unlock(){
 }
 
 function initMap(){
-  MAP = L.map('map',{ preferCanvas:true }).setView([37.5,137.0], 5);
-  L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{
-    maxZoom:18, attribution:'地理院タイル'
+  MAP = L.map('map',{ preferCanvas:true, minZoom:5 }).setView([37.5,137.0], 5);
+  // 白地図（海岸線＋都道府県等の境界のみ・地名/道路/山名なし）＝シンプルにしてピンを見やすく。
+  // 白地図はz5〜14配信のため maxNativeZoom:14（以降は拡大表示）。
+  L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/blank/{z}/{x}/{y}.png',{
+    minZoom:5, maxZoom:18, maxNativeZoom:14, attribution:'地理院タイル（白地図）'
   }).addTo(MAP);
   CLUSTER = L.layerGroup().addTo(MAP); // クラスタ廃止＝全ズームで個別ピン（canvas描画で軽量）
   // ズーム帯が変わったらピンの大きさを再調整（引くと小さく＝細かく、寄ると大きく）
