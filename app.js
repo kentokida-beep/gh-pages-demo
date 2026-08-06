@@ -153,7 +153,8 @@ async function fetchData(name){
 // 短縮キー(容量削減) → 通常キーへ展開
 function expandPt(o){
   return {name:o.n,floor:o.f,addr:o.a,pref:o.r,lat:o.y,lng:o.x,kubun:o.k,status:o.s,
-          depot:o.d,pc:o.p,plans:o.pl||[],days:o.dy||[],count:o.c,cid:o.i||'',contract:o.ct||''};
+          depot:o.d,pc:o.p,plans:o.pl||[],days:o.dy||[],count:o.c,cid:o.i||'',contract:o.ct||'',
+          honkDate:o.hd||'',wantMonth:o.wm||'',startDate:o.sd||'',endDate:o.ed||'',planRaw:o.pr||[]};
 }
 
 async function loadData(){
@@ -605,11 +606,16 @@ function popupHtml(p){
       ${distRow}
       ${row('CID',p.cid)}
       ${row('契約ステータス',p.contract)}
+      ${row('本契約日',p.honkDate)}
+      ${row('配達開始希望月',p.wantMonth)}
+      ${row('配達開始日',p.startDate)}
+      ${row('契約満了日',p.endDate)}
       ${row('住所',p.addr)}
       ${row('配送区分',p.kubun)}
       ${row('デポ/委託先',p.depot)}
       ${row('PC',p.pc)}
       ${row('プラン',(p.plans||[]).join('・'))}
+      ${row('プラン(詳細)',(p.planRaw||[]).join(' / '))}
       ${row('配達曜日',(p.days||[]).join('・'))}
       ${row('個数',p.count)}
       ${row('稼働ステータス',p.status)}
