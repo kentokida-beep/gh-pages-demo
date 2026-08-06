@@ -72,11 +72,12 @@ function unlock(){
 }
 
 function initMap(){
-  MAP = L.map('map',{ preferCanvas:true, minZoom:5 }).setView([37.5,137.0], 5);
-  // 白地図（海岸線＋都道府県等の境界のみ・地名/道路/山名なし）＝シンプルにしてピンを見やすく。
-  // 白地図はz5〜14配信のため maxNativeZoom:14（以降は拡大表示）。
-  L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/blank/{z}/{x}/{y}.png',{
-    minZoom:5, maxZoom:18, maxNativeZoom:14, attribution:'地理院タイル（白地図）'
+  MAP = L.map('map',{ preferCanvas:true, minZoom:4 }).setView([37.5,137.0], 5);
+  // ベース地図＝CARTO Voyager（ラベルなし）。淡い色付きの陸/海でピン（白フチ）が映える世界地図。
+  // 地名/道路/山名の個別非表示はラスタータイルの仕様上不可。白地図に戻すなら xyz/blank、地名入りは voyager_labels_under 等に差し替え。
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',{
+    subdomains:'abcd', minZoom:4, maxZoom:19, detectRetina:true,
+    attribution:'地図: © OpenStreetMap contributors, © CARTO'
   }).addTo(MAP);
   CLUSTER = L.layerGroup().addTo(MAP); // クラスタ廃止＝全ズームで個別ピン（canvas描画で軽量）
   // ズーム帯が変わったらピンの大きさを再調整（引くと小さく＝細かく、寄ると大きく）
