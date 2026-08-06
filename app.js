@@ -599,6 +599,7 @@ function buildColorUI(){
 
 function popupHtml(p){
   const row=(k,v)=> v?`<tr><td class="k">${k}</td><td>${esc(v)}</td></tr>`:'';
+  const dclean=v=> (v==='0000-00-00'||v==='0')?'':v; // プレースホルダ日付は空扱い
   let distRow='';
   if(SEARCH_ORIGIN){ const d=distKm(SEARCH_ORIGIN,[p.lat,p.lng]); distRow=`<tr><td class="k">検索地点からの距離</td><td><b>直線 ${d.toFixed(d<10?1:0)} km</b></td></tr>`; }
   return `<div class="lp"><b>${esc(p.name||'(名称なし)')}</b>${p.floor?' <span style="color:#64748b">'+esc(p.floor)+'</span>':''}
@@ -606,10 +607,10 @@ function popupHtml(p){
       ${distRow}
       ${row('CID',p.cid)}
       ${row('契約ステータス',p.contract)}
-      ${row('本契約日',p.honkDate)}
-      ${row('配達開始希望月',p.wantMonth)}
-      ${row('配達開始日',p.startDate)}
-      ${row('契約満了日',p.endDate)}
+      ${row('本契約日',dclean(p.honkDate))}
+      ${row('配達開始希望月',dclean(p.wantMonth))}
+      ${row('配達開始日',dclean(p.startDate))}
+      ${row('契約満了日',dclean(p.endDate))}
       ${row('住所',p.addr)}
       ${row('配送区分',p.kubun)}
       ${row('デポ/委託先',p.depot)}
@@ -619,6 +620,7 @@ function popupHtml(p){
       ${row('配達曜日',(p.days||[]).join('・'))}
       ${row('個数',p.count)}
       ${row('稼働ステータス',p.status)}
+      ${row('座標', (typeof p.lat==='number' && typeof p.lng==='number') ? p.lat.toFixed(6)+', '+p.lng.toFixed(6) : '')}
     </table></div>`;
 }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
