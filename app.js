@@ -791,7 +791,7 @@ function nearPopup(p,d){
   const detail=[p.depot,p.pc].filter(Boolean).join(' ／ ');
   const row=(k,v)=> v?`<tr><td class="k">${k}</td><td>${esc(v)}</td></tr>`:'';
   return `<div class="lp"><b>${esc(p.name)}</b> <span style="color:#64748b">${esc(p.floor||'')}</span>
-    <table>${row('検索地点からの距離','<b>直線 '+d.toFixed(d<10?1:0)+' km</b>')}${row('CID',p.cid)}${row('契約ステータス',p.contract)}${row('配送区分',p.kubun)}${row('プラン',(p.plans||[]).join('・'))}${row('配達曜日',days)}${row('デポ/PC',detail)}</table></div>`;
+    <table><tr><td class="k">検索地点からの距離</td><td><b>直線 ${d.toFixed(d<10?1:0)} km</b></td></tr>${row('CID',p.cid)}${row('契約ステータス',p.contract)}${row('配送区分',p.kubun)}${row('プラン',(p.plans||[]).join('・'))}${row('配達曜日',days)}${row('デポ/PC',detail)}${row('座標',p.lat.toFixed(6)+', '+p.lng.toFixed(6))}</table></div>`;
 }
 async function findNearest(){
   const q=document.getElementById('nearAddr').value.trim();
@@ -809,7 +809,7 @@ async function findNearest(){
   const top=cands.map(p=>({p,d:distKm(g,[p.lat,p.lng])})).sort((a,b)=>a.d-b.d).slice(0,3);
   // 地図に検索地点＋最寄り企業を表示（番号なし・タップで距離入りポップアップ）
   SEARCHLAYER.clearLayers();
-  const here=L.marker(g,{icon:L.divIcon({className:'',html:'<div style="font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">📍</div>',iconSize:[28,28],iconAnchor:[14,28],popupAnchor:[0,-26]}),zIndexOffset:3000}).bindPopup('<b>検索地点</b><br>'+esc(q));
+  const here=L.marker(g,{icon:L.divIcon({className:'',html:'<div style="font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">📍</div>',iconSize:[28,28],iconAnchor:[14,28],popupAnchor:[0,-26]}),zIndexOffset:3000}).bindPopup('<b>検索地点</b><br>'+esc(q)+'<br><span style="color:#64748b;font-size:11px;">座標 '+g[0].toFixed(6)+', '+g[1].toFixed(6)+'</span>');
   here.addTo(SEARCHLAYER);
   NEAR_MARKERS=[];
   const bounds=[g];
@@ -823,7 +823,9 @@ async function findNearest(){
   MAP.fitBounds(bounds,{padding:[70,70],maxZoom:16});
   if(NEAR_MARKERS[0]) NEAR_MARKERS[0].openPopup(); // 最寄り1社の距離ポップアップを自動表示
   // 結果カード（近い順・番号なし）＋ ✕クリア
-  box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="color:#64748b;font-size:11px;">最寄り3件（近い順）</span><button onclick="clearNearest()" style="border:1px solid #cbd5e1;background:#f1f5f9;color:#334155;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;">✕ クリア</button></div>'+top.map((s,i)=>{
+  box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="color:#64748b;font-size:11px;">最寄り3件（近い順）</span><button onclick="clearNearest()" style="border:1px solid #cbd5e1;background:#f1f5f9;color:#334155;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;">✕ クリア</button></div>'
+    +'<div style="font-size:11px;color:#475569;margin-bottom:6px;">📍 検索地点の座標: <b>'+g[0].toFixed(6)+', '+g[1].toFixed(6)+'</b></div>'
+    +top.map((s,i)=>{
     const p=s.p, c=KUBUN_COLORS[p.kubun]||'#f59e0b';
     const days=(p.days||[]).length ? (p.days.join('・')+'曜') : '曜日指定なし';
     const detail=[p.depot,p.pc].filter(Boolean).join(' ／ ');
@@ -832,6 +834,7 @@ async function findNearest(){
       <div style="color:#1e293b;margin-top:2px;">検索地点から <b>直線 ${s.d.toFixed(s.d<10?1:0)} km</b></div>
       <div style="margin-top:3px;color:#334155;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px;vertical-align:-1px;"></span>${esc(p.kubun)} ／ ${days}</div>
       ${detail?`<div style="color:#64748b;margin-top:2px;">${esc(detail)}</div>`:''}
+      <div style="color:#94a3b8;font-size:11px;margin-top:2px;">座標 ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</div>
       <div style="text-align:right;color:#0d9488;font-size:11px;margin-top:3px;">地図で表示 ›</div>
     </div>`;
   }).join('');
