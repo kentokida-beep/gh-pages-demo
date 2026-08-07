@@ -201,7 +201,7 @@ function buildFilters(){
   if(SIMPLE){ buildSimpleFilters(); return; }
   // 区分（稼働はデータから／「解約」は遅延読込チップとして常設・初期OFF）
   const kubuns=[...new Set(ALL.map(p=>p.kubun))].sort();
-  state.kubun = new Set(kubuns);
+  state.kubun = new Set(); // 初期は配送ルート未選択＝ピン非表示（ALL/曜日/PCを選ぶと表示）
   chips('f-kubun', [...kubuns, '解約'], state.kubun, KUBUN_COLORS);
   // 拠点レイヤ（デポ/PC等）
   chipsDepot();
@@ -388,7 +388,7 @@ function applyRoute(doFit){
   const pr=apply(); if(doFit && pr && pr.then) pr.then(fitToShown);
 }
 function routeResetFilters(){
-  state.kubun=new Set(ALL.map(p=>p.kubun)); if(ROUTE_CX) state.kubun.add('解約');
+  state.kubun=new Set(); // 配送ルート未選択＝地図にピンを出さない（ALL等を選ぶと表示）
   state.day=new Set([...DAYS,'なし']);
   state.plan=new Set(ALL.flatMap(p=>p.plans||[])); // 相互排他で外れた「ごはん」等を全復帰
   state.depotSet=null; state.pcSet=null; state.depotFilter=''; state.pcFilter=''; state.colorMode='kubun';
@@ -440,7 +440,7 @@ function matchSimple(p){
 }
 function match(p){
   if(SIMPLE) return matchSimple(p);
-  if(!state.kubun.has(p.kubun)) return false;
+  if(!state.kubun.has(p.kubun) && !(state.kw && !ROUTE_ACTIVE)) return false; // ルート未選択でもキーワード検索中は全区分を対象
   if(p.kubun==='解約'){ // 解約はデポ/PC/曜日/プランを持たない→区分ONなら表示（都道府県・キーワードのみ考慮）
     if(state.pref && p.pref!==state.pref) return false;
     if(state.kw){ const s=(p.name+' '+p.addr+' '+(p.pref||'')).toLowerCase(); if(s.indexOf(state.kw.toLowerCase())<0) return false; }
@@ -806,7 +806,7 @@ async function findNearest(){
   // 現在の絞り込み(配送区分など)に一致する企業だけを最寄り候補にする。
   // 絞り込みなし(既定=全ON)なら全件が候補＝全プランから最寄りを抽出。解約は常に候補から除外。
   if(!ALL.length){ box.innerHTML='データがまだ読み込まれていません。'; return; }
-  const cands=ALL.filter(p=>p.kubun!=='解約' && match(p));
+  const cands=ALL.filter(p=>p.kubun!=='解約' && (ROUTE_ACTIVE ? match(p) : true)); // ルート未選択時は全件から最寄りを検索
   if(!cands.length){ box.innerHTML='<span style="color:#f87171">現在の絞り込み条件に合う企業が見つかりませんでした。配送区分などの絞り込みを解除すると、全件から最寄りを検索します。</span>'; return; }
   const top=cands.map(p=>({p,d:distKm(g,[p.lat,p.lng])})).sort((a,b)=>a.d-b.d).slice(0,3);
   // 地図に検索地点＋最寄り企業を表示（番号なし・タップで距離入りポップアップ）
