@@ -388,7 +388,7 @@ function applyRoute(doFit){
   const pr=apply(); if(doFit && pr && pr.then) pr.then(fitToShown);
 }
 function routeResetFilters(){
-  state.kubun=new Set(); // 配送ルート未選択＝地図にピンを出さない（ALL等を選ぶと表示）
+  state.kubun=new Set(); if(ROUTE_CX) state.kubun.add('解約'); // 未選択＝ピンなし。ただし解約トグルONなら解約だけは表示
   state.day=new Set([...DAYS,'なし']);
   state.plan=new Set(ALL.flatMap(p=>p.plans||[])); // 相互排他で外れた「ごはん」等を全復帰
   state.depotSet=null; state.pcSet=null; state.depotFilter=''; state.pcFilter=''; state.colorMode='kubun';
